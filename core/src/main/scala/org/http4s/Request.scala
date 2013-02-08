@@ -2,7 +2,6 @@ package org.http4s
 
 import java.io.File
 import java.net.{URI, URL, InetAddress}
-import play.api.libs.iteratee.Enumerator
 import java.nio.charset.Charset
 
 case class Request(
@@ -13,7 +12,7 @@ case class Request(
   pathTranslated: Option[File] = None,
   protocol: ServerProtocol = HttpVersion.Http_1_1,
   headers: Headers = Headers.Empty,
-  body: Enumerator[Chunk] = Enumerator.eof,
+  body: PromiseStream[Chunk] = PromiseStream(),
   urlScheme: UrlScheme = UrlScheme.Http,
   serverName: String = InetAddress.getLocalHost.getHostName,
   serverPort: Int = 80,

@@ -1,16 +1,11 @@
 package org
 
-import play.api.libs.iteratee.Iteratee
 import concurrent.{ExecutionContext, Future, Promise}
 import scala.util.continuations._
 import scala.util.control.NonFatal
-import scala.collection.{GenTraversableOnce, IterableLike}
-import scala.collection.generic.CanBuildFrom
 
 package object http4s {
-  type Route = PartialFunction[Request, Handler]
-
-  type Handler = Iteratee[Chunk, Responder]
+  type Route = PartialFunction[Request, Future[Responder]]
 
   type Chunk = Array[Byte]
 

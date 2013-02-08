@@ -2,11 +2,11 @@ package org.http4s
 package servlet
 
 import javax.servlet.http.{HttpServletResponse, HttpServletRequest, HttpServlet}
-import play.api.libs.iteratee.{Iteratee, Enumerator}
 import java.net.InetAddress
 import scala.collection.JavaConverters._
-import concurrent.ExecutionContext
+import concurrent.{Future, ExecutionContext}
 import javax.servlet.AsyncContext
+import java.io.InputStream
 
 class Http4sServlet(route: Route, chunkSize: Int = 32 * 1024)(implicit executor: ExecutionContext = ExecutionContext.global) extends HttpServlet {
   override def service(req: HttpServletRequest, resp: HttpServletResponse) {
@@ -14,8 +14,7 @@ class Http4sServlet(route: Route, chunkSize: Int = 32 * 1024)(implicit executor:
     val ctx = req.startAsync()
     executor.execute(new Runnable {
       def run() {
-        val handler = route(request)
-        val responder = request.body.run(handler)
+        val responder = route(request)
         responder.onSuccess { case responder => renderResponse(responder, resp, ctx) }
       }
     })
@@ -26,12 +25,13 @@ class Http4sServlet(route: Route, chunkSize: Int = 32 * 1024)(implicit executor:
     for (header <- responder.headers) {
       resp.addHeader(header.name, header.value)
     }
-    val it = Iteratee.foreach[Chunk] { chunk =>
-      resp.getOutputStream.write(chunk)
-      resp.getOutputStream.flush()
-    }
-    responder.body.run(it).onComplete {
-      case _ => ctx.complete()
+    def renderBody(ps: PromiseStreamOut[Chunk]) {
+      ps.dequeue().foreach {
+        case bytes if bytes.isEmpty => ctx.complete()
+        case bytes =>
+          resp.getOutputStream.write(bytes)
+          renderBody(ps) // TODO not tail recursive
+      }
     }
   }
 
@@ -43,7 +43,7 @@ class Http4sServlet(route: Route, chunkSize: Int = 32 * 1024)(implicit executor:
       queryString = Option(req.getQueryString).getOrElse(""),
       protocol = ServerProtocol(req.getProtocol),
       headers = toHeaders(req),
-      body = Enumerator.fromStream(req.getInputStream, chunkSize),
+      body = chunk(req.getInputStream),
       urlScheme = UrlScheme(req.getScheme),
       serverName = req.getServerName,
       serverPort = req.getServerPort,
@@ -57,5 +57,16 @@ class Http4sServlet(route: Route, chunkSize: Int = 32 * 1024)(implicit executor:
       value <- req.getHeaders(name).asScala
     } yield Header(name, value)
     Headers(headers.toSeq : _*)
+  }
+
+  protected def chunk(inputStream: InputStream) = {
+    val promiseStream = PromiseStream[Chunk]()
+    var read = 0
+    var bytes: Array[Byte] = new Array[Byte](chunkSize)
+    while (read >= 0) {
+      read = inputStream.read(bytes)
+      promiseStream << bytes.slice(0, read)
+    }
+    promiseStream
   }
 }

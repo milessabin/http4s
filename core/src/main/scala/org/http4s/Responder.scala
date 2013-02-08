@@ -1,13 +1,9 @@
 package org.http4s
 
-import scala.concurrent.Future
-
-import play.api.libs.iteratee.Enumerator
-
 case class Responder(
   statusLine: StatusLine = StatusLine.Ok,
   headers: Headers = Headers.Empty,
-  body: Enumerator[Chunk] = Enumerator.eof
+  body: PromiseStream[Chunk] = PromiseStream()
 )
 
 case class StatusLine(code: Int, reason: String)
