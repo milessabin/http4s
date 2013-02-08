@@ -16,6 +16,16 @@ package object http4s {
 
   type Middleware = (Route => Route)
 
+  implicit class DataflowFuture[T](val future: Future[T]) extends AnyVal {
+    /**
+     * For use only within a Future.flow block or another compatible Delimited Continuations reset block.
+     *
+     * Returns the result of this Future without blocking, by suspending execution and storing it as a
+     * continuation until the result is available.
+     */
+    final def apply()(implicit ec: ExecutionContext): T @cps[Future[Any]] = shift(future flatMap (_: T ⇒ Future[Any]))
+  }
+
   implicit class DataflowPromise[T](val promise: Promise[T]) extends AnyVal {
     /**
      * Completes the Promise with the specified value or throws an exception if already

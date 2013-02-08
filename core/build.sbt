@@ -3,8 +3,8 @@ name := "http4s-core"
 description := "Core http4s framework"
 
 libraryDependencies ++= Seq(
-  "com.typesafe.akka" %% "akka-actor" % "2.1.0",
-  "com.typesafe.akka" %% "akka-dataflow" % "2.1.0",
+  "com.typesafe.akka" %% "akka-actor" % "2.1.0" % "test",
+  "com.typesafe.akka" %% "akka-dataflow" % "2.1.0" % "test",
   "play" %% "play-iteratees" % "2.1-RC3",
   "org.specs2" %% "specs2" % "1.13" % "test",
   "junit" % "junit" % "4.11" % "test"

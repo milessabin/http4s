@@ -5,17 +5,11 @@ package org.http4s
 import java.util.concurrent.atomic.AtomicReference
 import scala.util.continuations._
 import scala.annotation.tailrec
-import akka.util.Timeout
-import akka.dispatch.MessageDispatcher
-import akka.dataflow.DataflowFuture
-import concurrent.{ExecutionContext, Promise, Future}
-import util.Success
-import util.control.NonFatal
-import akka.event.Logging.{Debug, LogEventException}
+import scala.concurrent.{ExecutionContext, Promise, Future}
+import scala.util.Success
 
 object PromiseStream {
-  def apply[A]()(implicit dispatcher: MessageDispatcher, timeout: Timeout): PromiseStream[A] = new PromiseStream[A]
-  def apply[A](timeout: Long)(implicit dispatcher: MessageDispatcher): PromiseStream[A] = new PromiseStream[A]()(dispatcher, Timeout(timeout))
+  def apply[A](): PromiseStream[A] = new PromiseStream[A]()
 
   private sealed trait State
   private case object Normal extends State
@@ -34,7 +28,7 @@ trait PromiseStreamOut[A] {
 
   def apply(promise: Promise[A])(implicit executionContext: ExecutionContext): A @cps[Future[Any]]
 
-  final def map[B](f: (A) ⇒ B)(implicit timeout: Timeout): PromiseStreamOut[B] = new PromiseStreamOut[B] {
+  final def map[B](f: (A) ⇒ B): PromiseStreamOut[B] = new PromiseStreamOut[B] {
 
     def dequeue()(implicit executionContext: ExecutionContext): Future[B] = self.dequeue().map(f)
 
@@ -97,17 +91,17 @@ trait PromiseStreamIn[A] {
 
   def <<(elem1: A, elem2: A, elems: A*): PromiseStreamIn[A] @cps[Future[Any]]
 
-  def <<(elem: Future[A]): PromiseStreamIn[A] @cps[Future[Any]]
+  def <<(elem: Future[A])(implicit executionContext: ExecutionContext): PromiseStreamIn[A] @cps[Future[Any]]
 
-  def <<(elem1: Future[A], elem2: Future[A], elems: Future[A]*): PromiseStreamIn[A] @cps[Future[Any]]
+  def <<(elem1: Future[A], elem2: Future[A], elems: Future[A]*)(implicit executionContext: ExecutionContext): PromiseStreamIn[A] @cps[Future[Any]]
 
   def <<<(elems: Traversable[A]): PromiseStreamIn[A] @cps[Future[Any]]
 
-  def <<<(elems: Future[Traversable[A]]): PromiseStreamIn[A] @cps[Future[Any]]
+  def <<<(elems: Future[Traversable[A]])(implicit executionContext: ExecutionContext): PromiseStreamIn[A] @cps[Future[Any]]
 
 }
 
-class PromiseStream[A](implicit val dispatcher: MessageDispatcher, val timeout: Timeout) extends PromiseStreamOut[A] with PromiseStreamIn[A] {
+class PromiseStream[A] extends PromiseStreamOut[A] with PromiseStreamIn[A] {
   import PromiseStream.{ State, Normal, Pending, Busy }
 
   private val _elemOut: AtomicReference[List[A]] = new AtomicReference(Nil)
@@ -246,10 +240,10 @@ class PromiseStream[A](implicit val dispatcher: MessageDispatcher, val timeout: 
   final def <<(elem1: A, elem2: A, elems: A*): PromiseStream[A] @cps[Future[Any]] =
     shift { cont: (PromiseStream[A] ⇒ Future[Any]) ⇒ cont(this += (elem1, elem2, elems: _*)) }
 
-  final def <<(elem: Future[A]): PromiseStream[A] @cps[Future[Any]] =
+  final def <<(elem: Future[A])(implicit executionContext: ExecutionContext): PromiseStream[A] @cps[Future[Any]] =
     shift { cont: (PromiseStream[A] ⇒ Future[Any]) ⇒ elem map (a ⇒ cont(this += a)) }
 
-  final def <<(elem1: Future[A], elem2: Future[A], elems: Future[A]*): PromiseStream[A] @cps[Future[Any]] =
+  final def <<(elem1: Future[A], elem2: Future[A], elems: Future[A]*)(implicit executionContext: ExecutionContext): PromiseStream[A] @cps[Future[Any]] =
     shift { cont: (PromiseStream[A] ⇒ Future[Any]) ⇒
       val seq = Future.sequence(elem1 +: elem2 +: elems)
       seq map (a ⇒ cont(this ++= a))
@@ -258,6 +252,6 @@ class PromiseStream[A](implicit val dispatcher: MessageDispatcher, val timeout: 
   final def <<<(elems: Traversable[A]): PromiseStream[A] @cps[Future[Any]] =
     shift { cont: (PromiseStream[A] ⇒ Future[Any]) ⇒ cont(this ++= elems) }
 
-  final def <<<(elems: Future[Traversable[A]]): PromiseStream[A] @cps[Future[Any]] =
+  final def <<<(elems: Future[Traversable[A]])(implicit executionContext: ExecutionContext): PromiseStream[A] @cps[Future[Any]] =
     shift { cont: (PromiseStream[A] ⇒ Future[Any]) ⇒ elems map (as ⇒ cont(this ++= as)) }
 }

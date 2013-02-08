@@ -13,7 +13,6 @@ import cps.repeatC
 
 class PromiseStreamSpec extends Specification with NoTimeConversions {
   implicit val timeout = Timeout(3 seconds)
-  implicit val actorSystem = ActorSystem()
   import scala.concurrent.ExecutionContext.Implicits.global
 
   "A PromiseStream" should {
@@ -113,8 +112,8 @@ class PromiseStreamSpec extends Specification with NoTimeConversions {
     }
 
     "not fail under concurrent stress" in {
-      implicit val timeout = Timeout(60 seconds)
-      val q = PromiseStream[Long](timeout.duration.toMillis)
+      implicit val actorSystem = ActorSystem() // needed for repeatC
+      val q = PromiseStream[Long]()
 
       flow {
         var n = 0L
