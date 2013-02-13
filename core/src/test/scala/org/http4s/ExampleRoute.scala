@@ -3,20 +3,20 @@ package org.http4s
 import scala.language.reflectiveCalls
 import scala.concurrent.{ExecutionContext, Future}
 import play.api.libs.iteratee._
-import org.http4s.Method.Post
+import org.http4s.Method._
 
 object ExampleRoute {
   def apply(implicit executor: ExecutionContext = ExecutionContext.global): Route = {
-    case Root / "ping" =>
+    case Get(Root / "ping") =>
       Future.successful(Responder(body = Enumerator("pong".getBytes())))
 
     case req @ Post(Root / "echo") =>
       Future.successful(Responder(body = req.body))
 
-    case req @ Root / "echo" =>
+    case req @ Get(Root / "echo") =>
       Future.successful(Responder(body = req.body))
 
-    case req @ Root / "echo2" =>
+    case req @ Get(Root / "echo2") =>
       Future.successful(Responder(body = req.body &> Enumeratee.map[Chunk](e => e.slice(6, e.length))))
 
     case req @ Post(Root / "sum") =>
@@ -25,7 +25,7 @@ object ExampleRoute {
         Responder[Chunk](body = Enumerator(sum.toString.getBytes))
       }
 
-    case req @ Root / "stream" =>
+    case req @ Get(Root / "stream") =>
       Future.successful(Responder(body = Concurrent.unicast({
         channel =>
           for (i <- 1 to 10) {
@@ -35,7 +35,7 @@ object ExampleRoute {
           channel.eofAndEnd()
       })))
 
-    case req @ Root / "/igstring" =>
+    case req @ Get(Root / "igstring") =>
       Future.successful{
         val builder = new StringBuilder(20*1028)
 
@@ -45,20 +45,20 @@ object ExampleRoute {
       }
 
     // Reads the whole body before responding
-    case req @ Root / "determine_echo1" =>
+    case req @ Get(Root / "determine_echo1") =>
       req.body.run( Iteratee.getChunks).map {bytes =>
         Responder( body = Enumerator(bytes:_*))
       }
 
     // Demonstrate how simple it is to read some and then continue
-    case req @ Root / "determine_echo2" =>
+    case req @ Get(Root / "determine_echo2") =>
       val bit: Future[Option[Chunk]] = req.body.run(Iteratee.head)
       bit.map {
         case Some(bit) => Responder( body = Enumerator(bit) >>> req.body )
         case None => Responder( body = Enumerator.eof )
       }
 
-    case req @ Root / "fail" =>
+    case req @ Get(Root / "fail") =>
       sys.error("FAIL")
 }
 
