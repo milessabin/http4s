@@ -7,25 +7,25 @@ import org.http4s.Method.Post
 
 object ExampleRoute {
   def apply(implicit executor: ExecutionContext = ExecutionContext.global): Route = {
-    case req if req.pathInfo == "/ping" =>
+    case Root / "ping" =>
       Future.successful(Responder(body = Enumerator("pong".getBytes())))
 
-    case Post(req) if req.pathInfo == "/echo" =>
+    case req @ Post(Root / "echo") =>
       Future.successful(Responder(body = req.body))
 
-    case req if req.pathInfo == "/echo" =>
+    case req @ Root / "echo" =>
       Future.successful(Responder(body = req.body))
 
-    case req if req.pathInfo == "/echo2" =>
+    case req @ Root / "echo2" =>
       Future.successful(Responder(body = req.body &> Enumeratee.map[Chunk](e => e.slice(6, e.length))))
 
-    case Post(req) if req.pathInfo == "/sum" =>
+    case req @ Post(Root / "sum") =>
       stringHandler(req, 16) { s =>
         val sum = s.split('\n').map(_.toInt).sum
         Responder[Chunk](body = Enumerator(sum.toString.getBytes))
       }
 
-    case req if req.pathInfo == "/stream" =>
+    case req @ Root / "stream" =>
       Future.successful(Responder(body = Concurrent.unicast({
         channel =>
           for (i <- 1 to 10) {
@@ -35,7 +35,7 @@ object ExampleRoute {
           channel.eofAndEnd()
       })))
 
-    case req if req.pathInfo == "/bigstring" =>
+    case req @ Root / "/igstring" =>
       Future.successful{
         val builder = new StringBuilder(20*1028)
 
@@ -45,22 +45,22 @@ object ExampleRoute {
       }
 
     // Reads the whole body before responding
-    case req if req.pathInfo == "/determine_echo1" =>
+    case req @ Root / "determine_echo1" =>
       req.body.run( Iteratee.getChunks).map {bytes =>
         Responder( body = Enumerator(bytes:_*))
       }
 
     // Demonstrate how simple it is to read some and then continue
-    case req if req.pathInfo == "/determine_echo2" =>
+    case req @ Root / "determine_echo2" =>
       val bit: Future[Option[Chunk]] = req.body.run(Iteratee.head)
       bit.map {
         case Some(bit) => Responder( body = Enumerator(bit) >>> req.body )
         case None => Responder( body = Enumerator.eof )
       }
 
-    case req if req.pathInfo == "/fail" =>
+    case req @ Root / "fail" =>
       sys.error("FAIL")
- }
+}
 
   def stringHandler(req: Request[Chunk], maxSize: Int = Integer.MAX_VALUE)(f: String => Responder[Chunk]): Future[Responder[Chunk]] = {
     val it = (Traversable.takeUpTo[Chunk](maxSize)

@@ -16,7 +16,7 @@ case class Request[A](
   protocol: ServerProtocol = HttpVersion.`Http/1.1`,
   headers: Headers = Headers.Empty,
   body: Enumerator[A] = Enumerator.eof,
-  urlScheme: UrlScheme = UrlScheme.Http,
+  urlScheme: HttpUrlScheme = HttpUrlScheme.Http,
   serverName: String = InetAddress.getLocalHost.getHostName,
   serverPort: Int = 80,
   serverSoftware: ServerSoftware = ServerSoftware.Unknown,

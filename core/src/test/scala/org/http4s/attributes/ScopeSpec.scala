@@ -16,12 +16,10 @@ class ScopeSpec extends Specification {
 
   val req = Request[Chunk](body = Enumerator.eof)
 
-  val sess = ThisSession("blah")
-
   "A list of scopes" should {
     "sort from high to low ranking" in {
-      val nw = List(ThisApp(h), ThisContext, sess, ThisServer, ThisRequest(req)).sorted
-      nw must_== List(ThisRequest(req), sess, ThisApp(h), ThisContext, ThisServer)
+      val nw = List(ThisApp(h), ThisServer, ThisRequest(req)).sorted
+      nw must_== List(ThisRequest(req), ThisApp(h), ThisServer)
     }
   }
 }
