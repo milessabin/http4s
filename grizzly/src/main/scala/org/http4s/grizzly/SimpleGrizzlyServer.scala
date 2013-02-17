@@ -12,7 +12,7 @@ import org.glassfish.grizzly.websockets.{WebSocketEngine, WebSocketAddOn}
  */
 
 object SimpleGrizzlyServer {
-  def apply(port: Int = 8080, serverRoot:String = "/*")(route: Route, webSocketApps: WebSocketApp*)(implicit executionContext: ExecutionContext = concurrent.ExecutionContext.fromExecutorService(java.util.concurrent.Executors.newCachedThreadPool())) =
+  def apply(port: Int = 8080, serverRoot:String = "/*")(route: Route, webSocketApps: GrizzlyWebSocketApp*)(implicit executionContext: ExecutionContext = concurrent.ExecutionContext.fromExecutorService(java.util.concurrent.Executors.newCachedThreadPool())) =
   new SimpleGrizzlyServer(port = port, serverRoot = serverRoot)(Seq(route), webSocketApps:_*)
 }
 
@@ -23,7 +23,7 @@ class SimpleGrizzlyServer(port: Int=8080,
                           corePoolSize:Int = 10,
                           maxPoolSize:Int = 20)
                          (routes:Seq[Route],
-                          webSocketApps: WebSocketApp*)
+                          webSocketApps: GrizzlyWebSocketApp*)
                          (implicit executionContext: ExecutionContext = ExecutionContext.global)
 {
   private[grizzly] val httpServer = new HttpServer
