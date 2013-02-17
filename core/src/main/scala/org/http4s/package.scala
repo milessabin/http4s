@@ -22,6 +22,7 @@ package object http4s {
 
   private[http4s] implicit def string2Http4sString(s: String) = new Http4sString(s)
 
+  @deprecated     // Doesn't seem to be in use besides in scopes, and I think that is old.
   trait RouteHandler {
     def route: Route
   }
