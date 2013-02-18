@@ -4,7 +4,9 @@ import org.glassfish.grizzly.http.HttpRequestPacket
 import org.glassfish.grizzly.websockets._
 import concurrent.{ExecutionContext, Future}
 import play.api.libs.iteratee.{Input, Iteratee}
-import org.http4s.WebSocketApp
+
+import org.http4s.websocket._
+import org.http4s.Raw
 
 /**
  * @author Bryce Anderson
@@ -24,12 +26,13 @@ class GrizzlyWebSocketApp(val uri: String)(val route: WebSocketApp.WebSocketRout
 
   override def createSocket(handler: ProtocolHandler,request: HttpRequestPacket,listeners: WebSocketListener*) = {
     val (_it,enum) = route
-    var it: Future[Iteratee[String,_]] = Future.successful(_it)
+    var it: Future[Iteratee[WebPacket,_]] = Future.successful(_it)
 
-    def feedSocket(in: Input[String]) = synchronized(it = it.flatMap(_.feed(in)))
+    def feedSocket(in: Input[WebPacket]) = synchronized(it = it.flatMap(_.feed(in)))
 
     val socket = new DefaultWebSocket(handler,request,listeners:_*) {
-      override def onMessage(str: String) = feedSocket(Input.El(str))
+      override def onMessage(str: String) = feedSocket(Input.El(StringPacket(str)))
+      override def onMessage(data: Raw) = feedSocket(Input.El(BytePacket(data)))
 
       // Is there something I should be doing with this DataFrame?
       override def onClose(frame: DataFrame) = {
@@ -37,7 +40,12 @@ class GrizzlyWebSocketApp(val uri: String)(val route: WebSocketApp.WebSocketRout
         super.onClose(frame)
       }
     }
-    enum.run(Iteratee.foreach[String](socket.send(_)))
+
+    enum.run(Iteratee.foreach[WebPacket]{
+        case StringPacket(str) => socket.send(str)
+        case BytePacket(data)  => socket.send(data)
+      })
+
     socket
   }
 }

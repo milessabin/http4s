@@ -1,4 +1,5 @@
 package org.http4s
+package websocket
 
 import play.api.libs.iteratee.{Input, Iteratee, Enumerator}
 import concurrent.ExecutionContext
@@ -16,7 +17,7 @@ trait WebSocketApp {
 }
 
 object WebSocketApp {
-  type WebSocketRoute = (Iteratee[String,_], Enumerator[String])
+  type WebSocketRoute = (Iteratee[WebPacket,_], Enumerator[WebPacket])
 
   // Provided by Grizzly backend
   def apply(uri: String)(route: WebSocketApp.WebSocketRoute)
