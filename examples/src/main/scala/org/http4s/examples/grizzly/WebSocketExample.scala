@@ -6,7 +6,7 @@ package grizzly
  * Created on 2/16/13 at 11:02 PM
  */
 
-import org.http4s.StatusLine._
+import org.http4s.Status._
 import play.api.libs.iteratee.{Done, Iteratee,Concurrent}
 
 import websocket._
