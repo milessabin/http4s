@@ -16,17 +16,18 @@ Simple WebSocket example which demonstrates how simple it is to build WebSocket 
  */
 
 object WebSocketExample extends App {
-  val webSocketApp = WebSocketApp("/websocket"){
+  val webSocketApp = WebSocketApp("/websocket"){ req =>
     // We only need to define our input and output streams in the form of an Iteratee and an Enumerator
-    var chan: Concurrent.Channel[WebPacket] = null
-    val enum = Concurrent.unicast[WebPacket](chan=_)
-    val it = Iteratee.foreach[WebPacket]{
-      case StringPacket(s) =>
+
+    var chan: Concurrent.Channel[WebMessage] = null
+    val enum = Concurrent.unicast[WebMessage](chan=_)
+    val it = Iteratee.foreach[WebMessage]{
+      case StringMessage(s) =>
         val str = s"Received string: $s"
         println(str)
-        chan.push(StringPacket(str))
+        chan.push(StringMessage(str))
 
-      case BytePacket(_) => sys.error("Received BytePacket... That is Unexpected!")
+      case ByteMessage(_) => sys.error("Received ByteMessage... That is Unexpected!")
 
     }.map(_ => println("Connection Closed! This is from the App..."))
 

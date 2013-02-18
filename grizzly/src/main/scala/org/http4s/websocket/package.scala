@@ -6,9 +6,9 @@ package org.http4s
  */
 package object websocket {
 
-  sealed trait WebPacket
+  sealed trait WebMessage
 
-  case class StringPacket(str: String) extends WebPacket
-  case class BytePacket(bytes: Raw) extends WebPacket
+  case class StringMessage(str: String) extends WebMessage
+  case class ByteMessage(bytes: Raw) extends WebMessage
 
 }
