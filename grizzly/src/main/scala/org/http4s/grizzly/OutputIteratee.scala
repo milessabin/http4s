@@ -12,40 +12,57 @@ import org.glassfish.grizzly.http.server.io.NIOOutputStream
  */
 class OutputIteratee(os: NIOOutputStream, chunkSize: Int)(implicit executionContext: ExecutionContext) extends Iteratee[HttpChunk,Unit] {
 
-  // Keep a persistent listener. No need to make more objects than we have too
-   private[this] object writeWatcher extends WriteHandler {
-    var promise: Promise[Unit] = _
+  private[this] var osFuture: Future[Unit] = Future.successful()
 
-    // Makes a new promise and registers the callback to complete it
-    def registerAndListen() : Future[Unit] = {
-      promise = Promise()
-      os.notifyCanWrite(this,chunkSize)
-      promise.future
+  private[this] def writeBytes(bytes: Raw): Unit = {
+    val promise: Promise[Unit] = Promise()
+
+    val asyncWriter = new  WriteHandler {
+      override def onError(t: Throwable) {
+        promise.failure(t)
+        sys.error(s"Error on write listener: ${t.getStackTraceString}")
+      }
+      override def onWritePossible() = promise.success(os.write(bytes))
     }
 
-    def onError(t: Throwable) {
-      promise.failure(t)
-      sys.error(s"Error on write listener: ${t.getStackTraceString}")
-    }
-
-    def onWritePossible() = promise.success(Unit)
+    osFuture = osFuture.flatMap{ _ => os.notifyCanWrite(asyncWriter,bytes.length); promise.future }
   }
 
-  def push(in: Input[HttpChunk]): Iteratee[HttpChunk,Unit] = {
+  // Create a buffer for storing data until its larger than the chunkSize
+  private[this] val buff = new Array[Byte](chunkSize)
+  private[this] var buffSize = 0
+
+  // synchronized so that enumerators that work in different threads cant totally mess it up.
+  private[this] def push(in: Input[HttpChunk]): Iteratee[HttpChunk,Unit] = synchronized {
     in match {
       case Input.Empty => this
-      case Input.EOF => Done(Unit)
+      case Input.EOF =>
+        if (buffSize > 0) {
+          writeBytes(buff.take(buffSize))
+          buffSize = 0
+        }
+        Iteratee.flatten(osFuture.map(Done(_)))
+
       case Input.El(chunk) => chunk match {
-        case HttpEntity(bytes) => os.write(bytes)
+        case HttpEntity(bytes) =>
+          // Do the buffering
+          if (bytes.length + buffSize >= chunkSize) {
+            val tmp = new Array[Byte](bytes.length + buffSize)
+            buff.take(buffSize).copyToArray(tmp)
+            bytes.copyToArray(tmp,buffSize)
+            writeBytes(tmp)
+            buffSize = 0
+          } else {
+            bytes.copyToArray(buff, buffSize)
+            buffSize += bytes.length
+          }
+
         case _ => sys.error("Griz output Iteratee doesn't support your data type!")
       }
-        // Need to sub pattern match?
 
-        this
+      this
     }
   }
 
-  def fold[B](folder: (Step[HttpChunk, Unit]) => Future[B]): Future[B] = {
-    writeWatcher.registerAndListen().flatMap{ _ => folder(Step.Cont(push))}
-  }
+  def fold[B](folder: (Step[HttpChunk, Unit]) => Future[B]) = folder(Step.Cont(push))
 }

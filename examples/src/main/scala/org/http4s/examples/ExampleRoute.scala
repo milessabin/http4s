@@ -6,7 +6,7 @@ import play.api.libs.iteratee._
 import org.http4s.Method.Post
 
 object ExampleRoute {
-  import StatusLine._
+  import Status._
   import Writable._
 
   val flatBigString = (0 until 1000).map{ i => s"This is string number $i" }.foldLeft(""){_ + _}
@@ -47,7 +47,7 @@ object ExampleRoute {
 
     case req if req.pathInfo == "/bigstring2" =>
       Done{
-        Ok.feedChunk(Enumerator((0 until 1000) map { i => HttpEntity(s"This is string number $i".getBytes) }: _*))
+        Ok.feedChunks(Enumerator((0 until 1000) map { i => HttpEntity(s"This is string number $i".getBytes) }: _*))
       }
 
     case req if req.pathInfo == "/bigstring3" =>
@@ -98,6 +98,6 @@ object ExampleRoute {
     Iteratee.consume[Raw]().asInstanceOf[Iteratee[Raw, Raw]].map(new String(_, req.charset))
 
   private[this] def eofOrRequestTooLarge[B](f: String => Responder)(s: String) =
-    Iteratee.eofOrElse[B](Responder(ResponsePrelude(status = StatusLine.RequestEntityTooLarge)))(s).map(_.right.map(f))
+    Iteratee.eofOrElse[B](Responder(ResponsePrelude(status = Status.RequestEntityTooLarge)))(s).map(_.right.map(f))
 
 }
