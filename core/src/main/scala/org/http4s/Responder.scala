@@ -41,18 +41,20 @@ object Status {
 
   trait EntityResponderGenerator extends NoEntityResponderGenerator { self: Status =>
     def apply[A](body: A)(implicit w: Writable[A]): Responder =
-      feedChunks(Enumerator[HttpChunk](HttpEntity(w.asRaw(body))), Some(w.contentType))
+      feed(Enumerator[HttpChunk](w.toChunk(body)))
 
     /**
      * Profiling has shown this to be relatively slow.  Use with care.
      */
-    def feed[A](body: Enumerator[A] = Enumerator.eof)(implicit w: Writable[A]): Responder =
-      feedChunks(body.map(a => HttpEntity(w.asRaw(a))), Some(w.contentType))
-
-    def feedChunks(body: Enumerator[HttpChunk], contentType: Option[ContentType] = None): Responder = {
-      var headers = Headers.Empty
-      contentType.foreach { ct => headers :+= HttpHeaders.`Content-Type`(ct) }
-      Responder(ResponsePrelude(self, headers), Responder.replace(body))
+    def feed[A](enumerator: Enumerator[A] = Enumerator.eof)(implicit w: Writable[A], classTag: ClassTag[A]): Responder = {
+      var headers = Headers(HttpHeaders.`Content-Type`(w.contentType))
+      // Optimization: avoid enumeratee, if possible
+      val chunkEnumerator =
+        if (classOf[HttpChunk].isAssignableFrom(classTag.runtimeClass))
+          enumerator.asInstanceOf[Enumerator[HttpChunk]]
+        else
+          enumerator.through(Enumeratee.map(w.toChunk))
+      Responder(ResponsePrelude(self, headers), Responder.replace(chunkEnumerator))
     }
 
     def transform(enumeratee: Enumeratee[HttpChunk, HttpChunk]) =
