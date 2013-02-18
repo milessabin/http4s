@@ -41,7 +41,7 @@ object Status {
 
   trait EntityResponderGenerator extends NoEntityResponderGenerator { self: Status =>
     def apply[A](body: A)(implicit w: Writable[A]): Responder =
-      feed(Enumerator[HttpChunk](w.toChunk(body)))
+      feed(Enumerator[HttpChunk](HttpEntity(w.toRaw(body))))
 
     /**
      * Profiling has shown this to be relatively slow.  Use with care.
@@ -53,7 +53,7 @@ object Status {
         if (classOf[HttpChunk].isAssignableFrom(classTag.runtimeClass))
           enumerator.asInstanceOf[Enumerator[HttpChunk]]
         else
-          enumerator.through(Enumeratee.map(w.toChunk))
+          enumerator.through[HttpChunk](Enumeratee.map(a => HttpEntity(w.toRaw(a))))
       Responder(ResponsePrelude(self, headers), Responder.replace(chunkEnumerator))
     }
 

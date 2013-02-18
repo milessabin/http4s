@@ -5,7 +5,6 @@ import scala.language.implicitConversions
 trait Writable[-A] {
   def contentType: ContentType
   def toRaw(a: A): Raw
-  def toChunk(a: A): HttpChunk = HttpEntity(toRaw(a))
 }
 
 object Writable {
@@ -31,7 +30,6 @@ object Writable {
     new Writable[HttpChunk] {
       def contentType: ContentType = ContentType.`application/octet-stream`
       def toRaw(chunk: HttpChunk): Raw = chunk.bytes
-      override def toChunk(chunk: HttpChunk): HttpChunk = chunk
     }
 
   implicit def traversableWritable[A](implicit writable:Writable[A]) =
