@@ -7,17 +7,20 @@ import scala.Some
 import websocket._
 
 sealed trait ResponderBase
+
 case class Responder(
   prelude: ResponsePrelude,
   body: ResponderBody = Responder.EmptyBody
 ) extends ResponderBase
 
-// This doesn't work as a case class, so this is the best way to deal with it.
-case class SocketResponder(socket: ()=>(Iteratee[WebMessage,_], Enumerator[WebMessage])) extends ResponderBase
+// The socket type makes this not a good candidate for a case class
+trait SocketResponder extends ResponderBase {
+  def socket: SocketRoute
+}
 
 object WebSocket {
   def apply(f: => (Iteratee[WebMessage,_], Enumerator[WebMessage])): Iteratee[HttpChunk,SocketResponder] = {
-    Done(SocketResponder ( () => f ))
+    Done(new SocketResponder { def socket =  () => f })
   }
 }
 

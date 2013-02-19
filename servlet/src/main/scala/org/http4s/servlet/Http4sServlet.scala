@@ -7,7 +7,7 @@ import java.net.InetAddress
 import scala.collection.JavaConverters._
 import concurrent.{ExecutionContext,Future}
 import javax.servlet.{ServletConfig, AsyncContext}
-import org.http4s.Status.NotFound
+import org.http4s.Status.{NotFound, InternalServerError}
 
 class Http4sServlet(route: Route, chunkSize: Int = 32 * 1024)(implicit executor: ExecutionContext = ExecutionContext.global) extends HttpServlet {
   private[this] var serverSoftware: ServerSoftware = _
@@ -29,26 +29,29 @@ class Http4sServlet(route: Route, chunkSize: Int = 32 * 1024)(implicit executor:
 
   protected def handle(ctx: AsyncContext) {
     val servletRequest = ctx.getRequest.asInstanceOf[HttpServletRequest]
-    val servletResponse = ctx.getResponse.asInstanceOf[HttpServletResponse]
     val request = toRequest(servletRequest)
     val parser = route.lift(request).getOrElse(Done(NotFound(request)))
     val handler = parser.flatMap {
-      case responder: Responder =>
-        servletResponse.setStatus(responder.prelude.status.code, responder.prelude.status.reason)
-        for (header <- responder.prelude.headers)
-          servletResponse.addHeader(header.name, header.value)
-        responder.body.transform(Iteratee.foreach { chunk =>
-          val out = servletResponse.getOutputStream
-          out.write(chunk.bytes)
-          out.flush()
-      })
-
-      case _: SocketResponder => sys.error("Servlet Route captured a SocketResponder!")
+      case responder: Responder => renderResponse(ctx, responder)
+        // Websockets not handled yet.
+      case _: SocketResponder => renderResponse(ctx, InternalServerError())
     }
     Enumerator.fromStream(servletRequest.getInputStream, chunkSize)
       .map[HttpChunk](HttpEntity(_))
       .run(handler)
       .onComplete(_ => ctx.complete())
+  }
+
+  protected def renderResponse(ctx: AsyncContext, responder: Responder): Iteratee[HttpChunk,Unit] = {
+    val servletResponse = ctx.getResponse.asInstanceOf[HttpServletResponse]
+    servletResponse.setStatus(responder.prelude.status.code, responder.prelude.status.reason)
+    for (header <- responder.prelude.headers)
+      servletResponse.addHeader(header.name, header.value)
+    responder.body.transform(Iteratee.foreach { chunk =>
+      val out = servletResponse.getOutputStream
+      out.write(chunk.bytes)
+      out.flush()
+    })
   }
 
   protected def toRequest(req: HttpServletRequest): RequestPrelude = {

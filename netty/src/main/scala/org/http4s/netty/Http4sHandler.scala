@@ -18,7 +18,7 @@ import java.util.concurrent.LinkedBlockingDeque
 import org.http4s.Responder
 import scala.util.{ Failure, Success }
 import org.http4s.RequestPrelude
-import org.http4s.Status.NotFound
+import org.http4s.Status.{InternalServerError, NotFound}
 
 
 object Routes {
@@ -73,7 +73,7 @@ abstract class Http4sNetty(implicit executor: ExecutionContext = ExecutionContex
         val parser = route.lift(request).getOrElse(Done(NotFound(request)))
         val handler = parser flatMap {
           case r: Responder => renderResponse(ctx, req, r)
-          case _: SocketResponder => sys.error("Netty SocketResponder not implemented.")
+          case _: SocketResponder => renderResponse(ctx, req, InternalServerError())
         }
         Enumerator(req.getContent.array()).map[org.http4s.HttpChunk](org.http4s.HttpEntity(_)).run[Unit](handler)
 //        handler.feed(Input.El(HttpEntity(req.getContent.array()))) flatMap { i => i.feed(Input.EOF)}
