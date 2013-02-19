@@ -71,7 +71,10 @@ abstract class Http4sNetty(implicit executor: ExecutionContext = ExecutionContex
       val request = toRequest(ctx, req, rem.getAddress)
       if (route.isDefinedAt(request)) {
         val parser = route.lift(request).getOrElse(Done(NotFound(request)))
-        val handler = parser flatMap (renderResponse(ctx, req, _))
+        val handler = parser flatMap {
+          case r: Responder => renderResponse(ctx, req, r)
+          case _: SocketResponder => sys.error("Netty SocketResponder not implemented.")
+        }
         Enumerator(req.getContent.array()).map[org.http4s.HttpChunk](org.http4s.HttpEntity(_)).run[Unit](handler)
 //        handler.feed(Input.El(HttpEntity(req.getContent.array()))) flatMap { i => i.feed(Input.EOF)}
 //        responder onSuccess {

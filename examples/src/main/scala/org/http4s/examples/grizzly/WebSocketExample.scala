@@ -16,26 +16,29 @@ Simple WebSocket example which demonstrates how simple it is to build WebSocket 
  */
 
 object WebSocketExample extends App {
-  val webSocketApp = WebSocketApp("/websocket"){ req =>
-    // We only need to define our input and output streams in the form of an Iteratee and an Enumerator
 
-    var chan: Concurrent.Channel[WebMessage] = null
-    val enum = Concurrent.unicast[WebMessage](chan=_)
-    val it = Iteratee.foreach[WebMessage]{
-      case StringMessage(s) =>
-        val str = s"Received string: $s"
-        println(str)
-        chan.push(StringMessage(str))
-
-      case ByteMessage(_) => sys.error("Received ByteMessage... That is Unexpected!")
-
-    }.map(_ => println("Connection Closed! This is from the App..."))
-
-    (it,enum)
-  }
 
   val server = SimpleGrizzlyServer()({
+
+    case req if req.pathInfo == "/websocket" =>
+      WebSocket {
+        println("/////////////// DEBUG: This was executed!")
+        var chan: Concurrent.Channel[WebMessage] = null
+        val enum = Concurrent.unicast[WebMessage](chan=_)
+        val it = Iteratee.foreach[WebMessage]{
+          case StringMessage(s) =>
+            val str = s"Received string: $s"
+            println(str)
+            chan.push(StringMessage(str))
+
+          case ByteMessage(_) => sys.error("Received ByteMessage... That is Unexpected!")
+
+        }.map(_ => println("Connection Closed! This is from the App..."))
+
+        (it,enum)
+      }
+
     case req => Done(Ok("Hello world"))  // Define a route
-  }, webSocketApp)                       // Attach our webSocketApp
+  })                       // Attach our webSocketApp
   println("Hello world!")
 }

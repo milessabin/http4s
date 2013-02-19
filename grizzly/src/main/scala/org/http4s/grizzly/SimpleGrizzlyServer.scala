@@ -12,8 +12,9 @@ import org.glassfish.grizzly.websockets.{WebSocketEngine, WebSocketAddOn}
  */
 
 object SimpleGrizzlyServer {
-  def apply(port: Int = 8080, serverRoot:String = "/*")(route: Route, webSocketApps: GrizzlyWebSocketApp*)(implicit executionContext: ExecutionContext = concurrent.ExecutionContext.fromExecutorService(java.util.concurrent.Executors.newCachedThreadPool())) =
-  new SimpleGrizzlyServer(port = port, serverRoot = serverRoot)(Seq(route), webSocketApps:_*)
+  def apply(port: Int = 8080, serverRoot:String = "/*")(route: Route)
+           (implicit executionContext: ExecutionContext = concurrent.ExecutionContext.fromExecutorService(java.util.concurrent.Executors.newCachedThreadPool())) =
+  new SimpleGrizzlyServer(port = port, serverRoot = serverRoot)(Seq(route))
 }
 
 class SimpleGrizzlyServer(port: Int=8080,
@@ -22,12 +23,12 @@ class SimpleGrizzlyServer(port: Int=8080,
                           serverName:String="simple-grizzly-server",
                           corePoolSize:Int = 10,
                           maxPoolSize:Int = 20)
-                         (routes:Seq[Route],
-                          webSocketApps: GrizzlyWebSocketApp*)
+                         (routes:Seq[Route])
                          (implicit executionContext: ExecutionContext = ExecutionContext.global)
 {
   private[grizzly] val httpServer = new HttpServer
   private[grizzly] val networkListener = new NetworkListener(serverName, address, port)
+  private[this] val route = routes reduce (_ orElse _)
 
   private[this] val threadPoolConfig = ThreadPoolConfig
     .defaultConfig()
@@ -36,17 +37,19 @@ class SimpleGrizzlyServer(port: Int=8080,
 
   networkListener.getTransport().setWorkerThreadPoolConfig(threadPoolConfig)
 
-  // Add websocket support, if required.
-  if (routes.length > 0) {
-    networkListener.registerAddOn(new WebSocketAddOn())
-     webSocketApps.foreach(WebSocketEngine.getEngine().register)
-  }
+  // Add websocket support
+  val grizWebSocketApp = new GrizzlyWebSocketApp(serverRoot.substring(0, serverRoot.length-1), route)
+
+  networkListener.registerAddOn(new WebSocketAddOn())
+  WebSocketEngine.getEngine().register(grizWebSocketApp)
 
 
   httpServer.addListener(networkListener)
 
-  private[this] val http4sGrizzlyServlet = new Http4sGrizzly(routes reduce (_ orElse _))(executionContext)
+  private[this] val http4sGrizzlyServlet = new Http4sGrizzly(route)(executionContext)
   httpServer.getServerConfiguration().addHttpHandler(http4sGrizzlyServlet,serverRoot)
+
+
 
   try {
     httpServer.start()

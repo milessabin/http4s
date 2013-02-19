@@ -10,6 +10,7 @@ import concurrent.ExecutionContext
  * Created on 2/16/13 at 6:20 PM
  */
 
+/* TODO: In flux.
 trait WebSocketApp {
   def uri: String
   def route: WebSocketApp.WebSocketRoute
@@ -24,3 +25,4 @@ object WebSocketApp {
            (implicit ctx: ExecutionContext = ExecutionContext.global) =
     grizzly.GrizzlyWebSocketApp(uri)(route)(ctx)
 }
+*/

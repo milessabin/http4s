@@ -12,7 +12,7 @@ import java.nio.charset.Charset
 //import spray.http.HttpHeaders.RawHeader
 
 package object http4s {
-  type Route = PartialFunction[RequestPrelude, Iteratee[HttpChunk, Responder]]
+  type Route = PartialFunction[RequestPrelude, Iteratee[HttpChunk, ResponderBase]]
 
   type ResponderBody = Enumeratee[HttpChunk, HttpChunk]
 

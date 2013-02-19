@@ -2,8 +2,9 @@ package org.http4s.grizzly
 
 import org.glassfish.grizzly.http.HttpRequestPacket
 import org.glassfish.grizzly.websockets._
-import concurrent.{ExecutionContext, Future}
-import play.api.libs.iteratee.{Input, Iteratee}
+import concurrent.{Await, ExecutionContext, Future}
+import concurrent.duration._
+import play.api.libs.iteratee.{Input, Iteratee, Enumerator}
 
 import org.http4s.websocket._
 import org.http4s._
@@ -17,21 +18,37 @@ import org.http4s.RequestPrelude
  * Created on 2/17/13 at 4:29 PM
  */
 
-object GrizzlyWebSocketApp {
-  def apply(uri: String)(route: WebSocketApp.WebSocketRoute)
-           (implicit ctx: ExecutionContext = ExecutionContext.global) =
-    new GrizzlyWebSocketApp(uri)(route)(ctx)
-}
 
-class GrizzlyWebSocketApp(val uri: String)(val route: WebSocketApp.WebSocketRoute)
+class GrizzlyWebSocketApp(val context: String, val route: Route)
      (implicit ctx: ExecutionContext = ExecutionContext.global)
-  extends WebSocketApplication with WebSocketApp {
+  extends WebSocketApplication {
 
-  def isApplicationRequest(request: HttpRequestPacket): Boolean = uri == request.getRequestURI
+  def isApplicationRequest(request: HttpRequestPacket): Boolean = {
+    route.lift(toRequest(request)) match {
+      case Some(it) => {
+        Await.result(Enumerator.eof.run(it), 1 second) match {
+          case _: SocketResponder => true
+          case _ => false
+        }
+      }
+      case None => false
+    }
+  }
+
+  private[this] def buildPathStr(req: HttpRequestPacket): String = {
+    println(s"Websocket path: ${ctx + req.getRequestURI}")
+    ctx + req.getRequestURI
+  }
 
   override def createSocket(handler: ProtocolHandler,request: HttpRequestPacket,listeners: WebSocketListener*) = {
     // This is where we need to look for placing this in the normal route definitions
-    val (_it,enum) = route(toRequest(request))
+    val a: Future[ResponderBase] = Enumerator.eof.run(route(toRequest(request)))
+
+    val (_it,enum) = Await.result(a, 1 second) match {
+      case s: SocketResponder => s.socket()
+      case _ :Responder => sys.error(s"Route captured a websocket path: ${buildPathStr(request)}")
+    }
+
     var it: Future[Iteratee[WebMessage,_]] = Future.successful(_it)
 
     def feedSocket(in: Input[WebMessage]) = synchronized(it = it.flatMap(_.feed(in)))
@@ -63,8 +80,9 @@ class GrizzlyWebSocketApp(val uri: String)(val route: WebSocketApp.WebSocketRout
 
     RequestPrelude(                // TODO: fix all these
       requestMethod = Method(req.getMethod.toString),
-      scriptName = "", // req.getContextPath, // + req.getServletPath,
-      pathInfo = "", // Option(req.getPathInfo).getOrElse(""),
+      //scriptName = stringAttribute(req, ASYNC_CONTEXT_PATH) + stringAttribute(req, ASYNC_SERVLET_PATH)  // Servlet
+      scriptName = "", // req.getContextPath, // Can be obtained once this is formed into the server
+      pathInfo = req.getRequestURI, // Option(req.getPathInfo).getOrElse(""),
       queryString = Option(req.getQueryString).getOrElse(""),
       protocol = ServerProtocol(req.getProtocol.getProtocolString),
       headers = toHeaders(req),

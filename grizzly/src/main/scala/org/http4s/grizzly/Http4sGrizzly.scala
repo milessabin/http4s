@@ -6,8 +6,14 @@ import org.glassfish.grizzly.http.server.{Response,Request=>GrizReq,HttpHandler}
 import java.net.InetAddress
 import scala.collection.JavaConverters._
 import concurrent.{Future, ExecutionContext}
-import play.api.libs.iteratee.Done
+import play.api.libs.iteratee.{Input, Iteratee, Done}
 import org.http4s.Status.NotFound
+import websocket.{WebMessage}
+import org.glassfish.grizzly.websockets._
+import org.glassfish.grizzly.http.HttpRequestPacket
+import websocket.StringMessage
+import websocket.ByteMessage
+import org.http4s.RequestPrelude
 
 /**
  * @author Bryce Anderson
@@ -20,12 +26,14 @@ class Http4sGrizzly(route: Route, chunkSize: Int = 32 * 1024)(implicit executor:
 
     val request = toRequest(req)
     val parser = route.lift(request).getOrElse(Done(NotFound(request)))
-    val handler = parser.flatMap { responder =>
+    val handler = parser.flatMap { case responder: Responder =>
       resp.setStatus(responder.prelude.status.code, responder.prelude.status.reason)
       for (header <- responder.prelude.headers)
         resp.addHeader(header.name, header.value)
       val out = new OutputIteratee(resp.getNIOOutputStream, chunkSize)
       responder.body.transform(out)
+
+    case _: SocketResponder => sys.error(s"Http4sGrizzly captured a websocket route: ${req.getRequestURI} ")
     }
     new BodyEnumerator(req.getNIOInputStream, chunkSize)
       .run(handler)
@@ -35,7 +43,6 @@ class Http4sGrizzly(route: Route, chunkSize: Int = 32 * 1024)(implicit executor:
   protected def toRequest(req: GrizReq): RequestPrelude = {
     RequestPrelude(
       requestMethod = Method(req.getMethod.toString),
-
       scriptName = req.getContextPath, // + req.getServletPath,
       pathInfo = Option(req.getPathInfo).getOrElse(""),
       queryString = Option(req.getQueryString).getOrElse(""),

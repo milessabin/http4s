@@ -3,12 +3,23 @@ package org.http4s
 
 import play.api.libs.iteratee._
 import java.net.{URL, URI}
-import reflect.ClassTag
+import scala.Some
+import websocket._
 
+sealed trait ResponderBase
 case class Responder(
   prelude: ResponsePrelude,
   body: ResponderBody = Responder.EmptyBody
-)
+) extends ResponderBase
+
+// This doesn't work as a case class, so this is the best way to deal with it.
+case class SocketResponder(socket: ()=>(Iteratee[WebMessage,_], Enumerator[WebMessage])) extends ResponderBase
+
+object WebSocket {
+  def apply(f: => (Iteratee[WebMessage,_], Enumerator[WebMessage])): Iteratee[HttpChunk,SocketResponder] = {
+    Done(SocketResponder ( () => f ))
+  }
+}
 
 object Responder {
   def replace[F, T](enumerator: Enumerator[T]): Enumeratee[F, T] = new Enumeratee[F, T] {
