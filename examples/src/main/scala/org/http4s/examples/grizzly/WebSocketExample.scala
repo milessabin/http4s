@@ -22,7 +22,6 @@ object WebSocketExample extends App {
 
     case req if req.pathInfo == "/websocket" =>
       WebSocket {
-        println("/////////////// DEBUG: This was executed!")
         var chan: Concurrent.Channel[WebMessage] = null
         val enum = Concurrent.unicast[WebMessage](chan=_)
         val it = Iteratee.foreach[WebMessage]{

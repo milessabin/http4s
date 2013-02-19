@@ -77,7 +77,6 @@ class GrizzlyWebSocketApp(context: String, address: String, port: Int, route: Ro
   }
 
   def toRequest(req: HttpRequestPacket): RequestPrelude = {
-    println(s"Request url: ${buildRequestURL(req)}")
     RequestPrelude(                // TODO: fix all these
       requestMethod = Method(req.getMethod.toString),
       uri = URI.create(buildRequestURL(req) + "?" + Option(req.getQueryString).getOrElse("")),
