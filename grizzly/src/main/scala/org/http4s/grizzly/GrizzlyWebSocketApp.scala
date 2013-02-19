@@ -8,7 +8,7 @@ import play.api.libs.iteratee.{Input, Iteratee, Enumerator}
 
 import org.http4s.websocket._
 import org.http4s._
-import java.net.InetAddress
+import java.net.{InetAddress,URI}
 import websocket.ByteMessage
 import websocket.StringMessage
 import org.http4s.RequestPrelude
@@ -19,7 +19,7 @@ import org.http4s.RequestPrelude
  */
 
 
-class GrizzlyWebSocketApp(val context: String, val route: Route)
+class GrizzlyWebSocketApp(context: String, address: String, port: Int, route: Route)
      (implicit ctx: ExecutionContext = ExecutionContext.global)
   extends WebSocketApplication {
 
@@ -77,21 +77,32 @@ class GrizzlyWebSocketApp(val context: String, val route: Route)
   }
 
   def toRequest(req: HttpRequestPacket): RequestPrelude = {
-
+    println(s"Request url: ${buildRequestURL(req)}")
     RequestPrelude(                // TODO: fix all these
       requestMethod = Method(req.getMethod.toString),
-      //scriptName = stringAttribute(req, ASYNC_CONTEXT_PATH) + stringAttribute(req, ASYNC_SERVLET_PATH)  // Servlet
-      scriptName = "", // req.getContextPath, // Can be obtained once this is formed into the server
+      uri = URI.create(buildRequestURL(req) + "?" + Option(req.getQueryString).getOrElse("")),
       pathInfo = req.getRequestURI, // Option(req.getPathInfo).getOrElse(""),
-      queryString = Option(req.getQueryString).getOrElse(""),
       protocol = ServerProtocol(req.getProtocol.getProtocolString),
       headers = toHeaders(req),
-      urlScheme = UrlScheme("http"), //UrlScheme(req.getScheme),  // TODO: fix this.
-      serverName = req.serverName.toString,
-      serverPort = req.getServerPort,
       serverSoftware = ServerSoftware(req.serverName.toString),
       remote = InetAddress.getByName(req.getRemoteAddress) // TODO using remoteName would trigger a lookup
     )
+  }
+
+  // This is needed to build the request URL form the HttpRequestPacket.
+  protected def buildRequestURL(req: HttpRequestPacket): String = {
+    val sb = new StringBuilder
+    val scheme = if(req.isSecure) "https" else "http"
+    sb.append(scheme)
+    sb.append("://")
+    sb.append(address)
+    if ((scheme.equals("http") && (port != 80))
+      || (scheme.equals("https") && (port != 443))) {
+      sb.append(':')
+      sb.append(port)
+    }
+    sb.append(req.getRequestURI());
+    return sb.result
   }
 
   def toHeaders(req: HttpRequestPacket): Headers = {

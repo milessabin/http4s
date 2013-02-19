@@ -38,7 +38,7 @@ class SimpleGrizzlyServer(port: Int=8080,
   networkListener.getTransport().setWorkerThreadPoolConfig(threadPoolConfig)
 
   // Add websocket support
-  val grizWebSocketApp = new GrizzlyWebSocketApp(serverRoot.substring(0, serverRoot.length-1), route)
+  val grizWebSocketApp = new GrizzlyWebSocketApp(serverRoot.substring(0, serverRoot.length-1), address, port, route)
 
   networkListener.registerAddOn(new WebSocketAddOn())
   WebSocketEngine.getEngine().register(grizWebSocketApp)
