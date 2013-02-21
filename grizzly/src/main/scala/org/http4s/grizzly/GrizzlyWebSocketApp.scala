@@ -23,31 +23,19 @@ class GrizzlyWebSocketApp(context: String, address: String, port: Int, route: Ro
      (implicit ctx: ExecutionContext = ExecutionContext.global)
   extends WebSocketApplication {
 
-  def isApplicationRequest(request: HttpRequestPacket): Boolean = {
-    route.lift(toRequest(request)) match {
-      case Some(it) => {
-        Await.result(Enumerator.eof.run(it), 1 second) match {
-          case _: SocketResponder => true
-          case _ => false
-        }
-      }
-      case None => false
+  def isApplicationRequest(request: HttpRequestPacket) = route.lift(toRequest(request)).fold(false){ it =>
+    Await.result(Enumerator.eof.run(it), 1 second) match {
+      case responder: SocketResponder =>
+        // Store the socket route in the request so we can pick it up on the createSocket method
+        request.setAttribute("WebSocketRoute" , responder)
+        true
+      case _ => false
     }
-  }
-
-  private[this] def buildPathStr(req: HttpRequestPacket): String = {
-    println(s"Websocket path: ${ctx + req.getRequestURI}")
-    ctx + req.getRequestURI
   }
 
   override def createSocket(handler: ProtocolHandler,request: HttpRequestPacket,listeners: WebSocketListener*) = {
-    // This is where we need to look for placing this in the normal route definitions
-    val a: Future[ResponderBase] = Enumerator.eof.run(route(toRequest(request)))
 
-    val (_it,enum) = Await.result(a, 1 second) match {
-      case s: SocketResponder => s.socket()
-      case _ :Responder => sys.error(s"Route captured a websocket path: ${buildPathStr(request)}")
-    }
+    val (_it,enum) = (request.getAttribute("WebSocketRoute").asInstanceOf[SocketResponder]).socket()
 
     var it: Future[Iteratee[WebMessage,_]] = Future.successful(_it)
 
