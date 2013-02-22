@@ -8,6 +8,7 @@ import org.specs2.time.NoTimeConversions
 
 import Spool.{*::, **::}
 import concurrent.{Promise, Await, Future}
+import play.api.libs.iteratee.{Iteratee, Enumerator}
 
 class SpoolSpec extends Specification with NoTimeConversions {
   isolated
@@ -106,6 +107,7 @@ class SpoolSpec extends Specification with NoTimeConversions {
       Await.result(f, 2 seconds) must be_==(Seq(1,2))
     }
 
+/*
     "deconstruct" in {
       s must beLike {
         case fst *:: rest if fst == 1 && !rest.isCompleted => ok
@@ -132,6 +134,40 @@ class SpoolSpec extends Specification with NoTimeConversions {
       val s1s = s1.toSeq
       s1s.isCompleted must beTrue
       Await.result(s1s, 2 seconds) must be_==(Seq(4, 8))
+    }
+*/
+  }
+
+  "Large spools" should {
+    "not blow the stack" in {
+      val ss = new SpoolSource[Long]
+      val s = ss()
+      val seq = s.flatMap(_.toSeq).map(_.sum)
+      for (i <- 0 to 1000000) {
+        ss.offer(i)
+      }
+      ss.close()
+      Await.result(seq, 15 seconds) must be_==(500000500000L)
+    }
+
+    "not eat all the heap" in {
+      var ss = new SpoolSource[Array[Byte]]
+      val app: Future[Spool[Array[Byte]]] => Unit = { case x => x.map(_.map(_.length)) }
+      val req = Tuple1(ss())
+      app(req._1)
+      for (i <- 0 to 1000000) {
+        try {
+          ss.offer(new Array[Byte](1024 * 64))
+        }
+        catch {
+          case e: OutOfMemoryError =>
+            ss = null
+            System.gc()
+            sys.error("Died at "+i)
+        }
+      }
+      ss.close()
+      assert(true)
     }
   }
 }
