@@ -153,8 +153,9 @@ class SpoolSpec extends Specification with NoTimeConversions {
     "not eat all the heap" in {
       var ss = new SpoolSource[Array[Byte]]
       val app: Future[Spool[Array[Byte]]] => Unit = { case x => x.map(_.map(_.length)) }
-      val req = Tuple1(ss())
+      var req = Tuple1(ss())
       app(req._1)
+      req = null
       for (i <- 0 to 1000000) {
         try {
           ss.offer(new Array[Byte](1024 * 64))
