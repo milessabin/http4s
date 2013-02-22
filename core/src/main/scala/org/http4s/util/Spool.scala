@@ -36,19 +36,19 @@ import scala.util.{Failure, Success}
  * }}}
  */
 sealed trait Spool[+A] {
-  import Spool.{cons, cons1, empty}
+  import Spool.{cons, empty}
 
   def isEmpty: Boolean
 
   /**
    * The first element of the spool. Invalid for empty spools.
    */
-  def head: () => A
+  def head: A
 
   /**
    * The (deferred) tail of the spool. Invalid for empty spools.
    */
-  def tail: () => Future[Spool[A]]
+  def tail: Future[Spool[A]]
 
   /**
    * Apply {{f}} for each item in the spool, until the end.  {{f}} is
@@ -63,14 +63,14 @@ sealed trait Spool[+A] {
    */
   def foreachElem[B](f: Option[A] => B)(implicit executor: ExecutionContext) {
     if (!isEmpty) {
-      f(Some(head()))
+      f(Some(head))
       // note: this hack is to avoid deep
       // stacks in case a large portion
       // of the stream is already defined
-      var next = tail()
+      var next = tail
       while (next.value.fold(false)(_.isSuccess) && !next.value.get.get.isEmpty) {
-        f(Some(next.value.get.get.head()))
-        next = next.value.get.get.tail()
+        f(Some(next.value.get.get.head))
+        next = next.value.get.get.tail
       }
       next.onComplete {
         case Success(s) => s.foreachElem(f)
@@ -104,13 +104,13 @@ sealed trait Spool[+A] {
    * Concatenates two spools.
    */
   def ++[B >: A](that: Spool[B])(implicit executor: ExecutionContext): Spool[B] =
-    if (isEmpty) that else cons1(head(): B, tail() map { _ ++ that })
+    if (isEmpty) that else cons(head: B, tail map { _ ++ that })
 
   /**
    * Concatenates two spools.
    */
   def ++[B >: A](that: Future[Spool[B]])(implicit executor: ExecutionContext): Future[Spool[B]] =
-    if (isEmpty) that else Future.successful(cons1(head(): B, tail() flatMap { _ ++ that }))
+    if (isEmpty) that else Future.successful(cons(head: B, tail flatMap { _ ++ that }))
 
   /**
    * Applies a function that generates a spool to each element in this spool,
@@ -118,7 +118,7 @@ sealed trait Spool[+A] {
    */
   def flatMap[B](f: A => Future[Spool[B]])(implicit executor: ExecutionContext): Future[Spool[B]] =
     if (isEmpty) Future.successful(empty[B])
-    else f(head()) flatMap { _ ++ (tail() flatMap { _ flatMap f }) }
+    else f(head) flatMap { _ ++ (tail flatMap { _ flatMap f }) }
 
   /**
    * Fully buffer the spool to a {{Seq}}.  The returned future is
@@ -143,24 +143,40 @@ object Spool {
     def collect[B](f: PartialFunction[Nothing, B])(implicit executor: ExecutionContext) = Future.successful(this)
     override def toString = "Empty"
   }
+  case class Cons[A](value: A, next: Future[Spool[A]])
+    extends Spool[A]
+  {
+    def isEmpty = false
+    def head = value
+    def tail = next
+    def collect[B](f: PartialFunction[A, B])(implicit executor: ExecutionContext) = {
+      val next_ = next flatMap { _.collect(f) }
+      if (f.isDefinedAt(head)) Future.successful(Cons(f(head), next_))
+      else next_
+    }
+
+    override def toString = "Cons(%s, %c)".format(head, if (tail.isCompleted) '*' else '?')
+  }
 
   /**
    * Cons a value & (possibly deferred) tail to a new {{Spool}}.
    */
-  def cons1[A](value: => A, next: => Future[Spool[A]]): Spool[A] = new Spool[A] {
-    def isEmpty = false
-    def head = weakMemo(value)
-    def tail = weakMemo(next)
-    def collect[B](f: PartialFunction[A, B])(implicit executor: ExecutionContext) = {
-      val next_ = next flatMap { _.collect(f) }
-      if (f.isDefinedAt(head())) Future.successful(cons1(f(head()), next_))
-      else next_
-    }
+//  def cons1[A](value: => A, next: => Future[Spool[A]]): Spool[A] = new Spool[A] {
+//    def isEmpty = false
+//    def head = weakMemo(value)
+//    def tail = weakMemo(next)
+//    def collect[B](f: PartialFunction[A, B])(implicit executor: ExecutionContext) = {
+//      val next_ = next flatMap { _.collect(f) }
+//      if (f.isDefinedAt(head())) Future.successful(cons1(f(head()), next_))
+//      else next_
+//    }
+//
+//    override def toString = "Cons(%s, %c)".format(head, if (tail().isCompleted) '*' else '?')
+//  }
 
-    override def toString = "Cons(%s, %c)".format(head, if (tail().isCompleted) '*' else '?')
-  }
-
-  def cons[A](value: => A, nextStream: => Spool[A]): Spool[A] = cons1(value, Future.successful(nextStream))
+  //def cons[A](value: => A, nextStream: => Spool[A]): Spool[A] = cons1(value, Future.successful(nextStream))
+  def cons[A](value: A, next: Future[Spool[A]]): Spool[A] = Cons(value, next)
+  def cons[A](value: A, nextStream: Spool[A]): Spool[A] = Cons(value, Future.successful(nextStream))
 
   /**
    * The empty spool.
@@ -176,7 +192,7 @@ object Spool {
    */
 
   class Syntax[A](tail: => Future[Spool[A]]) {
-    def *::(head: A) = cons1(head, tail)
+    def *::(head: A) = cons(head, tail)
   }
 
   implicit def syntax[A](s: Future[Spool[A]]): Syntax[A] = new Syntax(s)
@@ -184,7 +200,7 @@ object Spool {
   object *:: {
     def unapply[A](s: => Spool[A]): Option[(A, Future[Spool[A]])] = {
       if (s.isEmpty) None
-      else Some((s.head(), s.tail()))
+      else Some((s.head, s.tail))
     }
   }
   class Syntax1[A](tail: => Spool[A]) {
@@ -196,7 +212,7 @@ object Spool {
   object **:: {
     def unapply[A](s: Spool[A])(implicit timeout: FiniteDuration): Option[(A, Spool[A])] = {
       if (s.isEmpty) None
-      else Some((s.head(), Await.result(s.tail(), timeout)))
+      else Some((s.head, Await.result(s.tail, timeout)))
     }
   }
 
@@ -254,7 +270,7 @@ class SpoolSource[A] {
       if (currentPromise ne emptyPromise) {
         // need to check that promiseRef hasn't already been offerd
         if (promiseRef.compareAndSet(currentPromise, nextPromise)) {
-          currentPromise.success(Spool.cons1(value, nextPromise.future))
+          currentPromise.success(Spool.cons(value, nextPromise.future))
         } else {
           // try again
           set()
