@@ -8,16 +8,17 @@ import org.xml.sax.{SAXException, InputSource}
 import javax.xml.parsers.SAXParser
 import scala.util.{Success, Try}
 import play.api.libs.iteratee.Enumeratee.CheckDone
+import scalaz._
 
-case class BodyParser[A](it: Iteratee[HttpChunk, Either[Responder, A]]) {
-  def apply(f: A => Responder): Iteratee[HttpChunk, Responder] = it.map(_.right.map(f).merge)
-  def map[B](f: A => B): BodyParser[B] = BodyParser(it.map[Either[Responder, B]](_.right.map(f)))
-  def flatMap[B](f: A => BodyParser[B]): BodyParser[B] =
-    BodyParser(it.flatMap[Either[Responder, B]](_.fold(
-      { responder: Responder => Done(Left(responder)) },
+case class BodyParser[A](it: Iteratee[HttpChunk, Responder \/ A]) {
+  def apply(f: A => Responder): Iteratee[HttpChunk, Responder] = it.map(_.map(f).fold(identity, identity))
+  def map[B](f: A => B): BodyParser[B] = BodyParser(it.map[Responder \/ B](_.map(f)))
+  def flatMap[B](f: A => BodyParser[B]): BodyParser[B] = BodyParser(
+    it.flatMap[Responder \/ B] { x => x.fold(
+      { responder: Responder => Done(-\/(responder)) },
       { a: A => f(a).it }
-    )))
-  def joinRight[A1 >: A, B](implicit ev: <:<[A1, Either[Responder, B]]): BodyParser[B] = BodyParser(it.map(_.joinRight))
+    )})
+  def joinRight[B](implicit ev: A <:< (Responder \/ B)): BodyParser[B] = BodyParser(it.map(_.flatMap(a => ev(a))))
 }
 
 object BodyParser {
@@ -50,26 +51,26 @@ object BodyParser {
       val in = bytes.iterator.asInputStream
       val source = new InputSource(in)
       source.setEncoding(charset.value)
-      Try(XML.loadXML(source, parser)).map(Right(_)).recover {
-        case e: SAXException => Left(onSaxException(e))
+      Try(XML.loadXML(source, parser)).map(\/-(_)).recover {
+        case e: SAXException => -\/(onSaxException(e))
       }.get
     }.joinRight
 
-  def ignoreBody: BodyParser[Unit] = BodyParser(whileBodyChunk &>> Iteratee.ignore[BodyChunk].map(Right(_)))
+  def ignoreBody: BodyParser[Unit] = BodyParser(whileBodyChunk &>> Iteratee.ignore[BodyChunk].map(\/-(_)))
 
   def trailer: BodyParser[TrailerChunk] = BodyParser(
     Enumeratee.dropWhile[HttpChunk](_.isInstanceOf[BodyChunk]) &>>
       (Iteratee.head[HttpChunk].map {
         case Some(trailer: TrailerChunk) => trailer
         case _ => TrailerChunk()
-      }.map(Right(_))))
+      }.map(\/-(_))))
 
   def consumeUpTo[A](consumer: Iteratee[BodyChunk, A], limit: Int = DefaultMaxEntitySize): BodyParser[A] = {
     val it = for {
       a <- Traversable.takeUpTo[BodyChunk](limit) &>> consumer
       tooLargeOrA <- Iteratee.eofOrElse(Status.RequestEntityTooLarge())(a)
     } yield tooLargeOrA
-    BodyParser(whileBodyChunk &>> it)
+    BodyParser(whileBodyChunk &>> it.map(\/.fromEither))
   }
 
   val whileBodyChunk: Enumeratee[HttpChunk, BodyChunk] = new CheckDone[HttpChunk, BodyChunk] {
