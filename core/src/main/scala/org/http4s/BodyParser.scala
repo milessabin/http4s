@@ -9,25 +9,19 @@ import javax.xml.parsers.SAXParser
 import scala.util.{Success, Try}
 import play.api.libs.iteratee.Enumeratee.CheckDone
 import scalaz._
-
-case class BodyParser[A](it: Iteratee[HttpChunk, Responder \/ A]) {
-  def apply(f: A => Responder): Iteratee[HttpChunk, Responder] = it.map(_.map(f).fold(identity, identity))
-  def map[B](f: A => B): BodyParser[B] = BodyParser(it.map[Responder \/ B](_.map(f)))
-  def flatMap[B](f: A => BodyParser[B]): BodyParser[B] = BodyParser(
-    it.flatMap[Responder \/ B] { x => x.fold(
-      { responder: Responder => Done(-\/(responder)) },
-      { a: A => f(a).it }
-    )})
-  def joinRight[B](implicit ev: A <:< (Responder \/ B)): BodyParser[B] = BodyParser(it.map(_.flatMap(a => ev(a))))
-}
+import scalaz.Scalaz._
 
 object BodyParser {
+
   val DefaultMaxEntitySize = Http4sConfig.getInt("org.http4s.default-max-entity-size")
 
   private val BodyChunkConsumer: Iteratee[BodyChunk, BodyChunk] = Iteratee.consume[BodyChunk]()
 
-  implicit def bodyParserToResponderIteratee(bodyParser: BodyParser[Responder]): Iteratee[HttpChunk, Responder] =
-    bodyParser(identity)
+  def apply[A](run: ChunkIteratee[Responder \/ A]): BodyParser[A] = EitherT[ChunkIteratee, Responder, A](run)
+
+  implicit class BodyParserOps[A](bodyParser: BodyParser[A]) {
+    def respond(f: A => Responder): ChunkIteratee[Responder] = bodyParser.map(f).fold(identity, identity)
+  }
 
   def text[A](charset: HttpCharset, limit: Int = DefaultMaxEntitySize): BodyParser[String] =
     consumeUpTo(BodyChunkConsumer, limit).map(_.decodeString(charset))
@@ -47,14 +41,16 @@ object BodyParser {
           parser: SAXParser = XML.parser,
           onSaxException: SAXException => Responder = { saxEx => saxEx.printStackTrace(); Status.BadRequest() })
   : BodyParser[Elem] =
-    consumeUpTo(BodyChunkConsumer, limit).map { bytes =>
+    BodyParser(consumeUpTo(BodyChunkConsumer, limit).map[Responder \/ Elem] { bytes =>
       val in = bytes.iterator.asInputStream
       val source = new InputSource(in)
       source.setEncoding(charset.value)
-      Try(XML.loadXML(source, parser)).map(\/-(_)).recover {
+      try {
+        \/-(XML.loadXML(source, parser))
+      } catch {
         case e: SAXException => -\/(onSaxException(e))
-      }.get
-    }.joinRight
+      }
+    }.run.map(_.join))
 
   def ignoreBody: BodyParser[Unit] = BodyParser(whileBodyChunk &>> Iteratee.ignore[BodyChunk].map(\/-(_)))
 

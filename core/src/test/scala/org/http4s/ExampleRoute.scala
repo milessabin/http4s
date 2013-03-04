@@ -33,19 +33,19 @@ object ExampleRoute extends RouteHandler {
       })
 
     case req @ Post(Root / "sum")  =>
-      text(req.charset, 16) { s =>
+      text(req.charset, 16).respond { s =>
         val sum = s.split('\n').map(_.toInt).sum
         Ok(sum)
       }
 
     case req @ Post(Root / "trailer") =>
-      trailer(t => Ok(t.headers.length))
+      trailer.respond { t => Ok(t.headers.length) }
 
     case req @ Post(Root / "body-and-trailer") =>
-      for {
+      (for {
         body <- text(req.charset)
         trailer <- trailer
-      } yield Ok(s"$body\n${trailer.headers("Hi").value}")
+      } yield Ok(s"$body\n${trailer.headers("Hi").value}")).respond(identity)
 
     case req @ Get(Root / "stream") =>
       Ok(Concurrent.unicast[ByteString]({
@@ -78,7 +78,7 @@ object ExampleRoute extends RouteHandler {
       }
 
     case req if req.pathInfo == "/root-element-name" =>
-      xml(req.charset) { elem =>
+      xml(req.charset).respond { elem =>
         Ok(elem.label)
       }
 

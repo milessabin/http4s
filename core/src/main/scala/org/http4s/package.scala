@@ -6,7 +6,7 @@ import http4s.attributes.RequestScope
 import http4s.ext.Http4sString
 import http4s.HttpHeaders.RawHeader
 import http4s.parser.HttpParser
-import play.api.libs.iteratee.{Enumeratee, Iteratee, Enumerator}
+import play.api.libs.iteratee.{Done, Enumeratee, Iteratee, Enumerator}
 import scala.language.implicitConversions
 import concurrent.{ExecutionContext, Future}
 import java.net.{InetAddress, URI}
@@ -15,15 +15,24 @@ import java.util.UUID
 import java.nio.charset.Charset
 import akka.util.ByteString
 import com.typesafe.config.{ConfigFactory, Config}
+import scalaz.{Monad, EitherT}
 
 //import spray.http.HttpHeaders.RawHeader
 
 package object http4s {
-  type Route = PartialFunction[RequestPrelude, Iteratee[HttpChunk, Responder]]
+  type ChunkIteratee[+A] = Iteratee[HttpChunk, A]
+  implicit val chunkIterateeMonad: Monad[ChunkIteratee] = new Monad[ChunkIteratee] {
+    def point[A](a : => A) = Done(a)
+    def bind[A, B](fa: ChunkIteratee[A])(f: A => ChunkIteratee[B]): ChunkIteratee[B] = fa.flatMap(f)
+  }
+
+  type Route = PartialFunction[RequestPrelude, ChunkIteratee[Responder]]
 
   type ResponderBody = Enumeratee[HttpChunk, HttpChunk]
 
   type Middleware = (Route => Route)
+
+  type BodyParser[A] = EitherT[ChunkIteratee, Responder, A]
 
   private[http4s] implicit def string2Http4sString(s: String) = new Http4sString(s)
 
