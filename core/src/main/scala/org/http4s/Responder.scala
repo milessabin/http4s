@@ -1,7 +1,7 @@
 package org.http4s
 
 
-import play.api.libs.iteratee._
+import org.http4s.iteratee._
 import java.net.{URL, URI}
 import reflect.ClassTag
 import util.DateTime

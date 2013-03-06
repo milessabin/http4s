@@ -3,7 +3,7 @@ package org.http4s
 import scala.language.reflectiveCalls
 
 import concurrent.{ExecutionContext, Future}
-import play.api.libs.iteratee.{Enumeratee, Enumerator, Iteratee}
+import org.http4s.iteratee.{Enumeratee, Enumerator, Iteratee}
 import akka.util.ByteString
 
 class MockServer(route: Route)(implicit executor: ExecutionContext = ExecutionContext.global) {

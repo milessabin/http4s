@@ -6,7 +6,7 @@ import http4s.attributes.RequestScope
 import http4s.ext.Http4sString
 import http4s.HttpHeaders.RawHeader
 import http4s.parser.HttpParser
-import play.api.libs.iteratee.{Enumeratee, Iteratee, Enumerator}
+import org.http4s.iteratee.{Enumeratee, Iteratee, Enumerator}
 import scala.language.implicitConversions
 import concurrent.{ExecutionContext, Future}
 import java.net.{InetAddress, URI}

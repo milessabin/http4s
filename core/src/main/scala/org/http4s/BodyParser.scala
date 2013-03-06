@@ -1,13 +1,13 @@
 package org.http4s
 
 import scala.language.reflectiveCalls
-import play.api.libs.iteratee._
+import org.http4s.iteratee._
 import java.io._
 import xml.{Elem, XML, NodeSeq}
 import org.xml.sax.{SAXException, InputSource}
 import javax.xml.parsers.SAXParser
 import scala.util.{Success, Try}
-import play.api.libs.iteratee.Enumeratee.CheckDone
+import org.http4s.iteratee.Enumeratee.CheckDone
 
 case class BodyParser[A](it: Iteratee[HttpChunk, Either[Responder, A]]) {
   def apply(f: A => Responder): Iteratee[HttpChunk, Responder] = it.map(_.right.map(f).merge)

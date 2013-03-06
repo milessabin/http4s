@@ -6,7 +6,7 @@ import org.glassfish.grizzly.http.server.{Response,Request=>GrizReq,HttpHandler}
 import java.net.InetAddress
 import scala.collection.JavaConverters._
 import concurrent.{Future, ExecutionContext}
-import play.api.libs.iteratee.{Concurrent, Done}
+import org.http4s.iteratee.{Concurrent, Done}
 import org.http4s.Status.NotFound
 import org.glassfish.grizzly.ReadHandler
 import akka.util.ByteString

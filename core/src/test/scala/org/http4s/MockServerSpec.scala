@@ -8,7 +8,7 @@ import concurrent.{Promise, Future, Await}
 import scala.concurrent.duration._
 
 import org.specs2.mutable.Specification
-import play.api.libs.iteratee._
+import org.http4s.iteratee._
 import org.specs2.time.NoTimeConversions
 import scala.io.Codec
 

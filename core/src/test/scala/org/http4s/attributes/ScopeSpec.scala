@@ -3,7 +3,7 @@ package attributes
 
 import org.specs2.mutable.Specification
 import concurrent.{ExecutionContext, Future}
-import play.api.libs.iteratee.{Input, Error, Enumerator}
+import org.http4s.iteratee.{Input, Error, Enumerator}
 import java.util.UUID
 
 

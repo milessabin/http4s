@@ -3,7 +3,7 @@ package org.http4s
 import attributes.{Key, ServerContext}
 import scala.language.reflectiveCalls
 import concurrent.{Future, ExecutionContext}
-import play.api.libs.iteratee._
+import org.http4s.iteratee._
 import akka.util.ByteString
 
 object ExampleRoute extends RouteHandler {

@@ -18,8 +18,6 @@ object Dependencies {
 
   val ParboiledScala = "org.parboiled" %%  "parboiled-scala" % "1.1.4"
 
-  val PlayIteratees = "play" %% "play-iteratees" % "2.1.0"
-
   val Rl = "org.scalatra.rl" %% "rl" % "0.4.2"
 
   val ScalaloggingSlf4j = "com.typesafe" %% "scalalogging-slf4j" % "1.0.1"

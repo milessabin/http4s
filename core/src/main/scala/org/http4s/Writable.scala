@@ -1,7 +1,7 @@
 package org.http4s
 
 import scala.language.implicitConversions
-import play.api.libs.iteratee._
+import org.http4s.iteratee._
 import concurrent.{ExecutionContext, Future}
 import akka.util.ByteString
 

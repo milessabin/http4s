@@ -2,7 +2,7 @@ package org.http4s
 package servlet
 
 import javax.servlet.http.{HttpServletResponse, HttpServletRequest, HttpServlet}
-import play.api.libs.iteratee.{Done, Iteratee, Enumerator}
+import org.http4s.iteratee.{Done, Iteratee, Enumerator}
 import java.net.InetAddress
 import scala.collection.JavaConverters._
 import concurrent.{ExecutionContext,Future}

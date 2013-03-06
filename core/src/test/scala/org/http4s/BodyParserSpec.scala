@@ -2,7 +2,7 @@ package org.http4s
 
 import org.specs2.mutable.Specification
 import org.specs2.time.NoTimeConversions
-import play.api.libs.iteratee.Enumerator
+import org.http4s.iteratee.Enumerator
 import Status._
 
 import scala.concurrent.duration._

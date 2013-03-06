@@ -1,6 +1,6 @@
 package org.http4s.grizzly
 
-import play.api.libs.iteratee.{Step, Done, Input, Iteratee}
+import org.http4s.iteratee.{Step, Done, Input, Iteratee}
 import org.http4s._
 import org.glassfish.grizzly.WriteHandler
 import concurrent.{ExecutionContext, Future, Promise}

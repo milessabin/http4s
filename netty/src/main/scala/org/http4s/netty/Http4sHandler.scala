@@ -7,7 +7,7 @@ import org.jboss.netty.channel._
 import scala.util.control.Exception.allCatch
 import org.jboss.netty.buffer.{ChannelBuffer, ChannelBuffers}
 import io.Codec
-import play.api.libs.iteratee._
+import org.http4s.iteratee._
 import java.net.{InetSocketAddress, URI, InetAddress}
 import collection.JavaConverters._
 import org.jboss.netty.handler.ssl.SslHandler
