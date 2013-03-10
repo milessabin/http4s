@@ -365,7 +365,7 @@ object Concurrent {
   def dropInputIfNotReady[E](duration: Long, unit: java.util.concurrent.TimeUnit = java.util.concurrent.TimeUnit.MILLISECONDS): Enumeratee[E, E] = new Enumeratee[E, E] {
 
     val busy = scala.concurrent.stm.Ref(false)
-    def applyOn[A](it: Iteratee[E, A]): Iteratee[E, Iteratee[E, A]] = {
+    def applyOn[A](it: Iteratee[E, A])(implicit executor: ExecutionContext): Iteratee[E, Iteratee[E, A]] = {
 
       def step(inner: Iteratee[E, A])(in: Input[E]): Iteratee[E, Iteratee[E, A]] = {
 
@@ -425,7 +425,7 @@ object Concurrent {
 
     import scala.concurrent.stm.Ref
 
-    def apply[A](it: Iteratee[E, A]): Future[Iteratee[E, A]] = {
+    def apply[A](it: Iteratee[E, A])(implicit executor: ExecutionContext): Future[Iteratee[E, A]] = {
       val promise: scala.concurrent.Promise[Iteratee[E, A]] = Promise[Iteratee[E, A]]()
       val iteratee: Ref[Future[Option[Input[E] => Iteratee[E, A]]]] = Ref(it.pureFold { case  Step.Cont(k) => Some(k); case other => promise.success(other.it); None})
 
@@ -497,7 +497,7 @@ object Concurrent {
    * @return A tuple of the broadcasting enumerator, that can be applied to each iteratee that wants to receive the
    *         input, and the broadcaster.
    */
-  def broadcast[E](e: Enumerator[E], interestIsDownToZero: Broadcaster => Unit = _ => ()): (Enumerator[E], Broadcaster) = { lazy val h: Hub[E] = hub(e, () => interestIsDownToZero(h)); (h.getPatchCord(), h) }
+  def broadcast[E](e: Enumerator[E], interestIsDownToZero: Broadcaster => Unit = _ => ())(implicit executor: ExecutionContext): (Enumerator[E], Broadcaster) = { lazy val h: Hub[E] = hub(e, () => interestIsDownToZero(h)); (h.getPatchCord(), h) }
 
   /**
    * A broadcaster.  Used to control a broadcasting enumerator.
@@ -528,7 +528,7 @@ object Concurrent {
   }
 
   @scala.deprecated("use Concurrent.broadcast instead", "2.1.0")
-  def hub[E](e: Enumerator[E], interestIsDownToZero: () => Unit = () => ()): Hub[E] = {
+  def hub[E](e: Enumerator[E], interestIsDownToZero: () => Unit = () => ())(implicit executor: ExecutionContext): Hub[E] = {
 
     import scala.concurrent.stm._
 
@@ -605,7 +605,7 @@ object Concurrent {
       val redeemed = Ref(None: Option[Try[Iteratee[E, Unit]]])
       def getPatchCord() = new Enumerator[E] {
 
-        def apply[A](it: Iteratee[E, A]): Future[Iteratee[E, A]] = {
+        def apply[A](it: Iteratee[E, A])(implicit executor: ExecutionContext): Future[Iteratee[E, A]] = {
           val result = Promise[Iteratee[E, A]]()
           val alreadyStarted = !started.single.compareAndSet(false, true)
           if (!alreadyStarted) {
@@ -675,7 +675,7 @@ object Concurrent {
 
     import scala.concurrent.stm._
 
-    def apply[A](it: Iteratee[E, A]): Future[Iteratee[E, A]] = {
+    def apply[A](it: Iteratee[E, A])(implicit executor: ExecutionContext): Future[Iteratee[E, A]] = {
       val result = Promise[Iteratee[E, A]]()
       var isClosed: Boolean = false
 

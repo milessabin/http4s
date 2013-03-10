@@ -415,7 +415,7 @@ object Enumerator {
    */
   def unfold[S,E](s:S)(f: S => Option[(S,E)] ): Enumerator[E] = checkContinue1(s)(new TreatCont1[E,S]{
 
-    def apply[A](loop: (Iteratee[E,A],S) => Future[Iteratee[E,A]], s:S, k: Input[E] => Iteratee[E,A]):Future[Iteratee[E,A]] = f(s) match {
+    def apply[A](loop: (Iteratee[E,A],S) => Future[Iteratee[E,A]], s:S, k: Input[E] => Iteratee[E,A])(implicit executor: ExecutionContext): Future[Iteratee[E,A]] = f(s) match {
       case Some((s,e)) => loop(k(Input.El(e)),s)
       case None => Future.successful(Cont(k))
     }
@@ -428,7 +428,7 @@ object Enumerator {
    */
   def repeat[E](e: => E): Enumerator[E] = checkContinue0( new TreatCont0[E]{
 
-    def apply[A](loop: Iteratee[E,A] => Future[Iteratee[E,A]], k: Input[E] => Iteratee[E,A]) = loop(k(Input.El(e)))
+    def apply[A](loop: Iteratee[E,A] => Future[Iteratee[E,A]], k: Input[E] => Iteratee[E,A])(implicit executor: ExecutionContext) = loop(k(Input.El(e)))
 
   })
 
@@ -460,7 +460,7 @@ object Enumerator {
 
   trait TreatCont0[E]{
 
-    def apply[A](loop: Iteratee[E,A] => Future[Iteratee[E,A]], k: Input[E] => Iteratee[E,A]):Future[Iteratee[E,A]]
+    def apply[A](loop: Iteratee[E,A] => Future[Iteratee[E,A]], k: Input[E] => Iteratee[E,A])(implicit executor: ExecutionContext): Future[Iteratee[E,A]]
 
   }
 
@@ -480,7 +480,7 @@ object Enumerator {
 
   trait TreatCont1[E,S]{
 
-    def apply[A](loop: (Iteratee[E,A],S) => Future[Iteratee[E,A]], s:S, k: Input[E] => Iteratee[E,A]):Future[Iteratee[E,A]]
+    def apply[A](loop: (Iteratee[E,A],S) => Future[Iteratee[E,A]], s:S, k: Input[E] => Iteratee[E,A])(implicit executor: ExecutionContext): Future[Iteratee[E,A]]
 
   }
 
@@ -694,75 +694,17 @@ object Enumerator {
   }
 
   private[iteratee] def enumerateSeq1[E](s:Seq[E]):Enumerator[E] = checkContinue1(s)(new TreatCont1[E,Seq[E]]{
-    def apply[A](loop: (Iteratee[E,A],Seq[E]) => Future[Iteratee[E,A]], s:Seq[E], k: Input[E] => Iteratee[E,A]):Future[Iteratee[E,A]] =
+    def apply[A](loop: (Iteratee[E,A],Seq[E]) => Future[Iteratee[E,A]], s:Seq[E], k: Input[E] => Iteratee[E,A])(implicit executor: ExecutionContext): Future[Iteratee[E,A]] =
       if(!s.isEmpty)
         loop(k(Input.El(s.head)),s.tail)
       else Future.successful(Cont(k))
   })
 
   private[iteratee] def enumerateSeq2[E](s:Seq[Input[E]]):Enumerator[E] = checkContinue1(s)(new TreatCont1[E,Seq[Input[E]]]{
-    def apply[A](loop: (Iteratee[E,A],Seq[Input[E]]) => Future[Iteratee[E,A]], s:Seq[Input[E]], k: Input[E] => Iteratee[E,A]):Future[Iteratee[E,A]] =
+    def apply[A](loop: (Iteratee[E,A],Seq[Input[E]]) => Future[Iteratee[E,A]], s:Seq[Input[E]], k: Input[E] => Iteratee[E,A])(implicit executor: ExecutionContext) :Future[Iteratee[E,A]] =
       if(!s.isEmpty)
         loop(k(s.head),s.tail)
       else Future.successful(Cont(k))
   })
-
-}
-
-@scala.deprecated("use Concurrent.broadcast instead", "2.1.0")
-class PushEnumerator[E] private[iteratee] (
-    onStart: () => Unit = () => (),
-    onComplete: () => Unit = () => (),
-    onError: (String, Input[E]) => Unit = (_: String, _: Input[E]) => ()) extends Enumerator[E] with Enumerator.Pushee[E] {
-
-  var iteratee: Iteratee[E, _] = _
-  var promise: Promise[Iteratee[E, _]]= _
-
-  def apply[A](it: Iteratee[E, A])(implicit executor: ExecutionContext): Future[Iteratee[E, A]] = {
-    onStart()
-    iteratee = it.asInstanceOf[Iteratee[E, _]]
-    val newPromise = Promise[Iteratee[E, A]]()
-    promise = newPromise.asInstanceOf[Promise[Iteratee[E, _]]]
-    newPromise.future
-  }
-
-  def close()(implicit executor: ExecutionContext) {
-    if (iteratee != null) {
-      iteratee.feed(Input.EOF).map(result => promise.success(result))
-      iteratee = null
-      promise = null
-    }
-  }
-
-  def push(item: E)(implicit executor: ExecutionContext): Boolean = {
-    if (iteratee != null) {
-      iteratee = iteratee.pureFlatFold[E, Any] {
-
-        case Step.Done(a, in) => {
-          onComplete()
-          Done(a, in)
-        }
-
-        case Step.Cont(k) => {
-          val next = k(Input.El(item))
-          next.pureFlatFold {
-            case Step.Done(a, in) => {
-              onComplete()
-              next
-            }
-            case _ => next
-          }
-        }
-
-        case Step.Error(e, in) => {
-          onError(e, in)
-          Error(e, in)
-        }
-      }
-      true
-    } else {
-      false
-    }
-  }
 
 }
