@@ -574,7 +574,7 @@ object Enumeratee {
             case other => Done(other.it, in)
           }.unflatten.map({ s =>
             s.it
-          })(org.http4s.iteratee.internal.defaultExecutionContext).recover({ case e: Throwable =>
+          })(executor).recover({ case e: Throwable =>
             f(e, in)
             Cont(step(it))
           })(executor)
