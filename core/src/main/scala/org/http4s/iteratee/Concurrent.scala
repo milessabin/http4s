@@ -1,12 +1,9 @@
 package org.http4s.iteratee
 
-import scala.concurrent.Future
-import scala.concurrent.Promise
+import concurrent.{ExecutionContext, Future, Promise}
 import scala.util.{Try, Failure, Success}
 import Enumerator.Pushee
 import java.util.concurrent.{ TimeUnit }
-
-import org.http4s.iteratee.internal.defaultExecutionContext
 
 /**
  * Utilities for concurrent usage of iteratees, enumerators and enumeratees.
@@ -86,7 +83,7 @@ object Concurrent {
    * chatChannel.push(Message("Hello world!"))
    * }}}
    */
-  def broadcast[E]: (Enumerator[E], Channel[E]) = {
+  def broadcast[E](implicit executor: ExecutionContext): (Enumerator[E], Channel[E]) = {
 
     import scala.concurrent.stm._
 
@@ -137,7 +134,7 @@ object Concurrent {
 
     val enumerator = new Enumerator[E] {
 
-      def apply[A](it: Iteratee[E, A]): Future[Iteratee[E, A]] = {
+      def apply[A](it: Iteratee[E, A])(implicit executor: ExecutionContext): Future[Iteratee[E, A]] = {
         val result = Promise[Iteratee[E, A]]()
 
         val finished = atomic { implicit txn =>
@@ -223,7 +220,7 @@ object Concurrent {
    */
   def lazyAndErrIfNotReady[E](timeout: Long, unit: TimeUnit = TimeUnit.MILLISECONDS): Enumeratee[E, E] = new Enumeratee[E, E] {
 
-    def applyOn[A](inner: Iteratee[E, A]): Iteratee[E, Iteratee[E, A]] = {
+    def applyOn[A](inner: Iteratee[E, A])(implicit executor: ExecutionContext): Iteratee[E, Iteratee[E, A]] = {
       def step(it: Iteratee[E, A]): K[E, Iteratee[E, A]] = {
         case Input.EOF => Done(it, Input.EOF)
 
@@ -274,7 +271,7 @@ object Concurrent {
     import scala.concurrent.stm._
     import org.http4s.iteratee.Enumeratee.CheckDone
 
-    def applyOn[A](it: Iteratee[E, A]): Iteratee[E, Iteratee[E, A]] = {
+    def applyOn[A](it: Iteratee[E, A])(implicit executor: ExecutionContext): Iteratee[E, Iteratee[E, A]] = {
 
       val last = Promise[Iteratee[E, Iteratee[E, A]]]()
 
@@ -341,10 +338,10 @@ object Concurrent {
             case _ => throw new Exception("can't get here")
           }
         }
-        Iteratee.flatten(in.map { in => (new CheckDone[E, E] { def continue[A](cont: K[E, A]) = moreInput(cont) } &> k(in)) })
+        Iteratee.flatten(in.map { in => (new CheckDone[E, E] { def continue[A](cont: K[E, A])(implicit executor: ExecutionContext) = moreInput(cont) } &> k(in)) })
 
       }
-      (new CheckDone[E, E] { def continue[A](cont: K[E, A]) = moreInput(cont) } &> it).unflatten.onComplete {
+      (new CheckDone[E, E] { def continue[A](cont: K[E, A])(implicit executor: ExecutionContext) = moreInput(cont) } &> it).unflatten.onComplete {
         case Success(it) =>
           state.single() = DoneIt(it.it)
           last.success(it.it)

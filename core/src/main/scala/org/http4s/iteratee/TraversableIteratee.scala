@@ -1,5 +1,7 @@
 package org.http4s.iteratee
 
+import concurrent.ExecutionContext
+
 object Traversable {
 
   @scala.deprecated("use Enumeratee.passAlong instead", "2.1.x")
@@ -20,7 +22,7 @@ object Traversable {
 
   def takeUpTo[M](count: Int)(implicit p: M => scala.collection.TraversableLike[_, M]): Enumeratee[M, M] = new Enumeratee[M, M] {
 
-    def applyOn[A](it: Iteratee[M, A]): Iteratee[M, Iteratee[M, A]] = {
+    def applyOn[A](it: Iteratee[M, A])(implicit executor: ExecutionContext): Iteratee[M, Iteratee[M, A]] = {
 
       def step(inner: Iteratee[M, A], leftToTake: Int)(in: Input[M]): Iteratee[M, Iteratee[M, A]] = {
         in match {
@@ -46,7 +48,7 @@ object Traversable {
 
   def take[M](count: Int)(implicit p: M => scala.collection.TraversableLike[_, M]): Enumeratee[M, M] = new Enumeratee[M, M] {
 
-    def applyOn[A](it: Iteratee[M, A]): Iteratee[M, Iteratee[M, A]] = {
+    def applyOn[A](it: Iteratee[M, A])(implicit executor: ExecutionContext): Iteratee[M, Iteratee[M, A]] = {
 
       def step(inner: Iteratee[M, A], leftToTake: Int)(in: Input[M]): Iteratee[M, Iteratee[M, A]] = {
         in match {
@@ -76,28 +78,28 @@ object Traversable {
 
   def splitOnceAt[M,E](p: E => Boolean)(implicit traversableLike: M => scala.collection.TraversableLike[E, M]):Enumeratee[M,M] =  new CheckDone[M, M] {
 
-      def step[A](k: K[M, A]): K[M, Iteratee[M, A]] = {
+      def step[A](k: K[M, A])(implicit executor: ExecutionContext): K[M, Iteratee[M, A]] = {
 
         case in @ Input.El(e) =>
           e.span(p) match {
-            case (prefix,suffix) if suffix.isEmpty => new CheckDone[M, M] { def continue[A](k: K[M, A]) = Cont(step(k)) } &> k(Input.El(prefix))
+            case (prefix,suffix) if suffix.isEmpty => new CheckDone[M, M] { def continue[A](k: K[M, A])(implicit executor: ExecutionContext) = Cont(step(k)) } &> k(Input.El(prefix))
             case (prefix,suffix) => Done(if(prefix.isEmpty) Cont(k) else  k(Input.El(prefix)), Input.El(suffix.drop(1)))
           }
 
         case in @ Input.Empty =>
-          new CheckDone[M, M] { def continue[A](k: K[M, A]) = Cont(step(k)) } &> k(in)
+          new CheckDone[M, M] { def continue[A](k: K[M, A])(implicit executor: ExecutionContext) = Cont(step(k)) } &> k(in)
 
         case Input.EOF => Done(Cont(k), Input.EOF)
 
       }
 
-      def continue[A](k: K[M, A]) = Cont(step(k))
+      def continue[A](k: K[M, A])(implicit executor: ExecutionContext) = Cont(step(k))
 
   }
 
   def drop[M](count: Int)(implicit p: M => scala.collection.TraversableLike[_, M]): Enumeratee[M, M] = new Enumeratee[M, M] {
 
-    def applyOn[A](inner: Iteratee[M, A]): Iteratee[M, Iteratee[M, A]] = {
+    def applyOn[A](inner: Iteratee[M, A])(implicit executor: ExecutionContext): Iteratee[M, Iteratee[M, A]] = {
 
       def step(it: Iteratee[M, A], leftToDrop: Int)(in: Input[M]): Iteratee[M, Iteratee[M, A]] = {
         in match {
