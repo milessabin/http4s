@@ -4,7 +4,7 @@ import org.specs2.mutable.Specification
 import org.specs2.time.NoTimeConversions
 
 import org.http4s._
-import play.api.libs.iteratee.Enumerator
+import iteratee.Enumerator
 /**
  * @author Bryce Anderson
  * Created on 3/9/13 at 11:10 AM

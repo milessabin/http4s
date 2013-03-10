@@ -47,5 +47,5 @@ class OutputIteratee(os: NIOOutputStream, isChunked: Boolean)(implicit execution
     }
   }
 
-  def fold[B](folder: (Step[HttpChunk, Unit]) => Future[B]) = folder(Step.Cont(push))
+  def fold[B](folder: (Step[HttpChunk, Unit]) => Future[B])(implicit executor: ExecutionContext) = folder(Step.Cont(push))
 }

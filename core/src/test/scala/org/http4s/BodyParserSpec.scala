@@ -6,6 +6,7 @@ import org.http4s.iteratee.Enumerator
 import Status._
 
 import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.{global => executor}
 
 import java.io.{FileOutputStream,FileInputStream,File,InputStreamReader}
 import concurrent.Await
@@ -21,7 +22,7 @@ class BodyParserSpec extends Specification with NoTimeConversions {
 
   "xml" should {
     val server = new MockServer({
-      case req => xml(req.charset) { elem => Ok(elem.label) }
+      case req => xml(req.charset).respond { elem => Ok(elem.label) }
     })
 
     "parse the XML" in {
@@ -62,7 +63,7 @@ class BodyParserSpec extends Specification with NoTimeConversions {
       val tmpFile = File.createTempFile("foo","bar")
       val response = mocServe(RequestPrelude(), {
         case req =>
-          BodyParser.textFile(req, tmpFile){
+          BodyParser.textFile(req, tmpFile) {
             Ok("Hello")
           }
       })

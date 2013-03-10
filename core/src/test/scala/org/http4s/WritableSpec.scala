@@ -1,10 +1,11 @@
 package org.http4s
 
 import org.specs2.mutable.Specification
-import play.api.libs.iteratee.Enumerator
+import iteratee.Enumerator
 import org.http4s.Status._
 import akka.util.ByteString
 import concurrent.Future
+import concurrent.ExecutionContext.Implicits.global
 
 /**
  * @author Bryce Anderson

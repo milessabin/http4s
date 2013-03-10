@@ -13,7 +13,7 @@ class MockServer(route: Route)(implicit executor: ExecutionContext = ExecutionCo
     try {
       route.lift(req).fold(Future.successful(onNotFound)) { parser =>
         val it: Iteratee[HttpChunk, Response] = parser.flatMap { responder =>
-          val responseBodyIt: Iteratee[BodyChunk, BodyChunk] = Iteratee.consume()
+          val responseBodyIt: Iteratee[BodyChunk, BodyChunk] = Iteratee.consume(executor)()
           responder.body ><> BodyParser.whileBodyChunk &>> responseBodyIt map { bytes: BodyChunk =>
             Response(responder.prelude.status, responder.prelude.headers, body = bytes.toArray)
           }

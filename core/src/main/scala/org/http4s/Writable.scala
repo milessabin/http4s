@@ -21,18 +21,18 @@ trait SimpleWritable[-A] extends Writable[A] {
 object Writable {
   private[http4s] def sendByteString(data: ByteString): Enumeratee[HttpChunk, HttpChunk] =
     new Enumeratee[HttpChunk, HttpChunk] {
-      def applyOn[A](inner: Iteratee[HttpChunk, A]): Iteratee[HttpChunk, Iteratee[HttpChunk, A]] =
+      def applyOn[A](inner: Iteratee[HttpChunk, A])(implicit executor: ExecutionContext): Iteratee[HttpChunk, Iteratee[HttpChunk, A]] =
         Done(Iteratee.flatten(inner.feed(Input.El(BodyChunk(data)))), Input.Empty)
     }
 
-  private[http4s] def sendFuture[T](f: Future[T])(implicit ec: ExecutionContext): Enumeratee[T, T] =
+  private[http4s] def sendFuture[T](f: Future[T]): Enumeratee[T, T] =
     new Enumeratee[T, T] {
-      def applyOn[A](inner: Iteratee[T, A]): Iteratee[T, Iteratee[T, A]] =
+      def applyOn[A](inner: Iteratee[T, A])(implicit executor: ExecutionContext): Iteratee[T, Iteratee[T, A]] =
         Done(Iteratee.flatten(f.flatMap{ d => inner.feed(Input.El(d))}))
     }
 
   private[http4s] def sendEnumerator[F, T](enumerator: Enumerator[T]): Enumeratee[F, T] = new Enumeratee[F, T] {
-    def applyOn[A](inner: Iteratee[T, A]): Iteratee[F, Iteratee[T, A]] =
+    def applyOn[A](inner: Iteratee[T, A])(implicit executor: ExecutionContext): Iteratee[F, Iteratee[T, A]] =
       Done(Iteratee.flatten(enumerator(inner)), Input.Empty)
   }
   // Simple types defined

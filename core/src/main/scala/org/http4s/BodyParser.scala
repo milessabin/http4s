@@ -8,27 +8,28 @@ import org.xml.sax.{SAXException, InputSource}
 import javax.xml.parsers.SAXParser
 import scala.util.{Success, Try}
 import org.http4s.iteratee.Enumeratee.CheckDone
+import concurrent.ExecutionContext
 
 case class BodyParser[A](it: Iteratee[HttpChunk, Either[Responder, A]]) {
-  def apply(f: A => Responder): Iteratee[HttpChunk, Responder] = it.map(_.right.map(f).merge)
-  def map[B](f: A => B): BodyParser[B] = BodyParser(it.map[Either[Responder, B]](_.right.map(f)))
-  def flatMap[B](f: A => BodyParser[B]): BodyParser[B] =
+  def respond(f: A => Responder)(implicit executor: ExecutionContext): Iteratee[HttpChunk, Responder] = it.map(_.right.map(f).merge)
+  def map[B](f: A => B)(implicit executor: ExecutionContext): BodyParser[B] = BodyParser(it.map[Either[Responder, B]](_.right.map(f)))
+  def flatMap[B](f: A => BodyParser[B])(implicit executor: ExecutionContext): BodyParser[B] =
     BodyParser(it.flatMap[Either[Responder, B]](_.fold(
       { responder: Responder => Done(Left(responder)) },
       { a: A => f(a).it }
     )))
-  def joinRight[A1 >: A, B](implicit ev: <:<[A1, Either[Responder, B]]): BodyParser[B] = BodyParser(it.map(_.joinRight))
+  def joinRight[A1 >: A, B](implicit ev: <:<[A1, Either[Responder, B]], executor: ExecutionContext): BodyParser[B] = BodyParser(it.map(_.joinRight))
 }
 
 object BodyParser {
   val DefaultMaxEntitySize = Http4sConfig.getInt("org.http4s.default-max-entity-size")
 
-  private val BodyChunkConsumer: Iteratee[BodyChunk, BodyChunk] = Iteratee.consume[BodyChunk]()
+  private def BodyChunkConsumer(implicit executor: ExecutionContext): Iteratee[BodyChunk, BodyChunk] = Iteratee.consume[BodyChunk](executor)()
 
-  implicit def bodyParserToResponderIteratee(bodyParser: BodyParser[Responder]): Iteratee[HttpChunk, Responder] =
-    bodyParser(identity)
+  implicit def bodyParserToResponderIteratee(bodyParser: BodyParser[Responder])(implicit executor: ExecutionContext): Iteratee[HttpChunk, Responder] =
+    bodyParser.respond(identity)
 
-  def text[A](charset: HttpCharset, limit: Int = DefaultMaxEntitySize): BodyParser[String] =
+  def text[A](charset: HttpCharset, limit: Int = DefaultMaxEntitySize)(implicit executor: ExecutionContext): BodyParser[String] =
     consumeUpTo(BodyChunkConsumer, limit).map(_.decodeString(charset))
 
   /**
@@ -44,7 +45,7 @@ object BodyParser {
   def xml(charset: HttpCharset,
           limit: Int = DefaultMaxEntitySize,
           parser: SAXParser = XML.parser,
-          onSaxException: SAXException => Responder = { saxEx => saxEx.printStackTrace(); Status.BadRequest() })
+          onSaxException: SAXException => Responder = { saxEx => saxEx.printStackTrace(); Status.BadRequest() })(implicit executor: ExecutionContext)
   : BodyParser[Elem] =
     consumeUpTo(BodyChunkConsumer, limit).map { bytes =>
       val in = bytes.iterator.asInputStream
@@ -55,16 +56,16 @@ object BodyParser {
       }.get
     }.joinRight
 
-  def ignoreBody: BodyParser[Unit] = BodyParser(whileBodyChunk &>> Iteratee.ignore[BodyChunk].map(Right(_)))
+  def ignoreBody(implicit executor: ExecutionContext): BodyParser[Unit] = BodyParser(whileBodyChunk &>> Iteratee.ignore[BodyChunk].map(Right(_)))
 
-  def trailer: BodyParser[TrailerChunk] = BodyParser(
+  def trailer(implicit executor: ExecutionContext): BodyParser[TrailerChunk] = BodyParser(
     Enumeratee.dropWhile[HttpChunk](_.isInstanceOf[BodyChunk]) &>>
       (Iteratee.head[HttpChunk].map {
         case Some(trailer: TrailerChunk) => trailer
         case _ => TrailerChunk()
       }.map(Right(_))))
 
-  def consumeUpTo[A](consumer: Iteratee[BodyChunk, A], limit: Int = DefaultMaxEntitySize): BodyParser[A] = {
+  def consumeUpTo[A](consumer: Iteratee[BodyChunk, A], limit: Int = DefaultMaxEntitySize)(implicit executor: ExecutionContext): BodyParser[A] = {
     val it = for {
       a <- Traversable.takeUpTo[BodyChunk](limit) &>> consumer
       tooLargeOrA <- Iteratee.eofOrElse(Status.RequestEntityTooLarge())(a)
@@ -73,27 +74,27 @@ object BodyParser {
   }
 
   val whileBodyChunk: Enumeratee[HttpChunk, BodyChunk] = new CheckDone[HttpChunk, BodyChunk] {
-    def step[A](k: K[BodyChunk, A]): K[HttpChunk, Iteratee[BodyChunk, A]] = {
+    def step[A](k: K[BodyChunk, A])(implicit executor: ExecutionContext): K[HttpChunk, Iteratee[BodyChunk, A]] = {
       case in @ Input.El(e: BodyChunk) =>
         new CheckDone[HttpChunk, BodyChunk] {
-          def continue[A](k: K[BodyChunk, A]) = Cont(step(k))
+          def continue[A](k: K[BodyChunk, A])(implicit executor: ExecutionContext) = Cont(step(k))
         } &> k(in.asInstanceOf[Input[BodyChunk]])
       case in @ Input.El(e) =>
         Done(Cont(k), in)
       case in @ Input.Empty =>
-        new CheckDone[HttpChunk, BodyChunk] { def continue[A](k: K[BodyChunk, A]) = Cont(step(k)) } &> k(in)
+        new CheckDone[HttpChunk, BodyChunk] { def continue[A](k: K[BodyChunk, A])(implicit executor: ExecutionContext) = Cont(step(k)) } &> k(in)
       case Input.EOF => Done(Cont(k), Input.EOF)
     }
-    def continue[A](k: K[BodyChunk, A]) = Cont(step(k))
+    def continue[A](k: K[BodyChunk, A])(implicit executor: ExecutionContext) = Cont(step(k))
   }
 
   // File operations
-  def binFile(file: java.io.File)(f: => Responder): Iteratee[HttpChunk,Responder] = {
+  def binFile(file: java.io.File)(f: => Responder)(implicit executor: ExecutionContext): Iteratee[HttpChunk,Responder] = {
     val out = new java.io.FileOutputStream(file)
     whileBodyChunk &>> Iteratee.foreach[BodyChunk]{ d => out.write(d.toArray) }.map{ _ => out.close(); f }
   }
 
-  def textFile(req: RequestPrelude, in: java.io.File)(f: => Responder): Iteratee[HttpChunk,Responder] = {
+  def textFile(req: RequestPrelude, in: java.io.File)(f: => Responder)(implicit executor: ExecutionContext): Iteratee[HttpChunk,Responder] = {
     val is = new java.io.PrintStream(new FileOutputStream(in))
     whileBodyChunk &>> Iteratee.foreach[BodyChunk]{ d => is.print(d.decodeString(req.charset)) }.map{ _ => is.close(); f }
   }
