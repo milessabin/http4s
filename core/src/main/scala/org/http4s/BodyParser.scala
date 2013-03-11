@@ -8,7 +8,7 @@ import org.xml.sax.{SAXException, InputSource}
 import javax.xml.parsers.SAXParser
 import scala.util.{Success, Try}
 import org.http4s.iteratee.Enumeratee.CheckDone
-import concurrent.ExecutionContext
+import concurrent.{Future, ExecutionContext}
 
 case class BodyParser[A](it: Iteratee[HttpChunk, Either[Responder, A]]) {
   def respond(f: A => Responder)(implicit executor: ExecutionContext): Iteratee[HttpChunk, Responder] = it.map(_.right.map(f).merge)
@@ -24,7 +24,7 @@ case class BodyParser[A](it: Iteratee[HttpChunk, Either[Responder, A]]) {
 object BodyParser {
   val DefaultMaxEntitySize = Http4sConfig.getInt("org.http4s.default-max-entity-size")
 
-  private def BodyChunkConsumer(implicit executor: ExecutionContext): Iteratee[BodyChunk, BodyChunk] = Iteratee.consume[BodyChunk](executor)()
+  private def BodyChunkConsumer(implicit executor: ExecutionContext): Iteratee[BodyChunk, BodyChunk] = Iteratee.consume[BodyChunk]()
 
   implicit def bodyParserToResponderIteratee(bodyParser: BodyParser[Responder])(implicit executor: ExecutionContext): Iteratee[HttpChunk, Responder] =
     bodyParser.respond(identity)

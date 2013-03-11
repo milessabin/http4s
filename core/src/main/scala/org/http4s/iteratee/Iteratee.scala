@@ -98,7 +98,7 @@ object Iteratee {
    * Chunks type should be viewable as TraversableOnce
    *
    */
-  def consume[E](implicit executor: ExecutionContext) = new {
+  def consume[E] = new {
     def apply[B, That]()(implicit t: E => TraversableOnce[B], bf: scala.collection.generic.CanBuildFrom[E, B, That], executor: ExecutionContext): Iteratee[E, That] = {
       fold[E, Seq[E]](Seq.empty) { (els, chunk) =>
         chunk +: els
