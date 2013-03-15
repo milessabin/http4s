@@ -129,7 +129,9 @@ abstract class Http4sNetty(implicit executor: ExecutionContext = ExecutionContex
       case Input.El(buffer) =>
         resp.setHeader(HttpHeaders.Names.CONTENT_LENGTH, buffer.readableBytes)
         resp.setContent(buffer)
-        Done((),Input.Empty:Input[org.jboss.netty.buffer.ChannelBuffer])
+        val d = Done(resp,Input.Empty:Input[org.jboss.netty.buffer.ChannelBuffer])
+        println("created done iteratee")
+        d
     }
 
 //
