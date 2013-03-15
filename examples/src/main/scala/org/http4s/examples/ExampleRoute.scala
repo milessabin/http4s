@@ -17,6 +17,7 @@ object ExampleRoute extends RouteHandler {
 
   def apply(implicit executor: ExecutionContext = ExecutionContext.global): Route = {
     case Get(Root / "ping") =>
+      println("received ping")
       Done(Ok("pong"))
 
     case Post(Root / "echo")  =>

@@ -1,7 +1,7 @@
 package org.http4s
 package netty
 
-import concurrent.{Future, ExecutionContext}
+import concurrent.{Await, Promise, Future, ExecutionContext}
 import handlers.ScalaUpstreamHandler
 import org.jboss.netty.channel._
 import scala.util.control.Exception.allCatch
@@ -14,13 +14,7 @@ import org.jboss.netty.handler.ssl.SslHandler
 import org.jboss.netty.handler.codec.http
 import http._
 import scala.language.{ implicitConversions, reflectiveCalls }
-import java.util.concurrent.LinkedBlockingDeque
-import org.http4s.Responder
-import scala.util.{ Failure, Success }
-import org.http4s.RequestPrelude
-import org.http4s.Status.NotFound
-import akka.util.ByteString
-import java.nio.ByteBuffer
+import concurrent.duration._
 
 object Routes {
    def apply(route: Route)(implicit executor: ExecutionContext = ExecutionContext.global) = new Routes(route)
@@ -38,14 +32,51 @@ abstract class Http4sNetty(implicit executor: ExecutionContext = ExecutionContex
 
       val request = toRequest(ctx, req, rem.getAddress)
       if (route.isDefinedAt(request)) {
-        val parser = route.lift(request).getOrElse(Done(NotFound(request)))
-        val handler = parser flatMap (renderResponse(ctx, req, _))
-        Enumerator[org.http4s.HttpChunk](BodyChunk(req.getContent.toByteBuffer)).run[Unit](handler)
+        val ch = ctx.getChannel
+        val parser = route.lift(request).getOrElse(Done(Status.NotFound(request)))
+        val handler = parser flatMap (renderResponse(ch, req, _))
+        val f = Enumerator[org.http4s.HttpChunk](BodyChunk(req.getContent.toByteBuffer)).run(handler)
+//        val f = Enumerator[org.http4s.HttpChunk](BodyChunk(req.getContent.toByteBuffer)).run(handler)
+        f onComplete {
+          case scala.util.Success(_) =>
+            println("prepared the response")
+          case scala.util.Failure(t) =>
+            println("failed sending the message")
+            t.printStackTrace()
+
+        }
+        f flatMap {
+          b =>
+            println("response calculated")
+            ctx.getChannel.write(b) flatMap { _ =>
+            println("wrote response to socket")
+            ctx.getChannel.close()
+          } recover {
+            case t =>
+              t.printStackTrace
+              throw t
+          }
+        } onComplete {
+          case scala.util.Success(_) =>
+            println("closed the socket")
+          case scala.util.Failure(t) =>
+            println("failed closing the socket")
+            t.printStackTrace()
+
+        }
+
+//        Await.ready(Enumerator[org.http4s.HttpChunk](BodyChunk(req.getContent.toByteBuffer)).run[Unit](handler), 1 second)
       } else {
         import org.http4s.HttpVersion
         val res = new http.DefaultHttpResponse(HttpVersion.`Http/1.1`, Status.NotFound)
         res.setContent(ChannelBuffers.copiedBuffer("Not Found", Codec.UTF8.charSet))
-        ctx.getChannel.write(res).addListener(ChannelFutureListener.CLOSE)
+        (NettyPromise(ctx.getChannel.write(res)) flatMap { _ =>
+//          if (!http.HttpHeaders.isKeepAlive(req) && ctx.getChannel.isConnected) NettyPromise(ctx.getChannel.close())
+//          else Future.successful(())
+          NettyPromise(ctx.getChannel.close())
+        }) onComplete {
+          case _ => println("not found completed")
+        }
       }
 
     case MessageReceived(ctx, chunk: HttpChunk, _) =>
@@ -64,9 +95,16 @@ abstract class Http4sNetty(implicit executor: ExecutionContext = ExecutionContex
       }
   }
 
-  protected def renderResponse(ctx: ChannelHandlerContext, req: HttpRequest, responder: Responder) = {
+  protected def renderResponse(ctx: Channel, req: HttpRequest, responder: Responder) = {
     def closeChannel(channel: Channel) = {
-      if (!http.HttpHeaders.isKeepAlive(req) && channel.isConnected) channel.close()
+//      if (!http.HttpHeaders.isKeepAlive(req) && channel.isConnected) NettyPromise(channel.close())
+//      if (channel.isConnected) NettyPromise(channel.close())
+//      else Future.successful(())
+      val f = NettyPromise(channel.close())
+      f onComplete {
+        case _ => println("Request completed")
+      }
+      f
     }
 
 
@@ -76,10 +114,10 @@ abstract class Http4sNetty(implicit executor: ExecutionContext = ExecutionContex
       resp.addHeader(header.name, header.value)
     }
 
-    val channelBuffer = ChannelBuffers.dynamicBuffer(8912)
     val writer: (ChannelBuffer, BodyChunk) => Unit = (c, x) => c.writeBytes(x.asByteBuffer)
-    val stringIteratee = Iteratee.fold[org.http4s.HttpChunk, ChannelBuffer](channelBuffer) {
+    val stringIteratee = Iteratee.fold[org.http4s.HttpChunk, ChannelBuffer](ChannelBuffers.dynamicBuffer(512)) {
       case (c, e: BodyChunk) =>
+        println("reading body chunk")
         writer(c, e)
         c
       case (c, e: TrailerChunk) =>
@@ -87,18 +125,26 @@ abstract class Http4sNetty(implicit executor: ExecutionContext = ExecutionContex
         c
     }
 
-    (responder.body ><> Enumeratee.grouped(stringIteratee) &>> Cont {
+    responder.body ><> Enumeratee.grouped(stringIteratee) &>> Cont {
       case Input.El(buffer) =>
-        resp.setHeader(HttpHeaders.Names.CONTENT_LENGTH, channelBuffer.readableBytes)
+        resp.setHeader(HttpHeaders.Names.CONTENT_LENGTH, buffer.readableBytes)
         resp.setContent(buffer)
-        val f = ctx.getChannel.write(resp)
-        f onComplete {
-          case _ => closeChannel(ctx.getChannel)
-        }
-        Iteratee.flatten(f.map(_ => Done((),Input.Empty:Input[org.jboss.netty.buffer.ChannelBuffer])))
+        Done((),Input.Empty:Input[org.jboss.netty.buffer.ChannelBuffer])
+    }
 
-      case other => Error("unexepected input",other)
-    })
+//
+//    (responder.body ><> Enumeratee.grouped(stringIteratee) &>> Cont {
+//      case Input.El(buffer) =>
+//        resp.setHeader(HttpHeaders.Names.CONTENT_LENGTH, buffer.readableBytes)
+//        resp.setContent(buffer)
+//        val f = ctx.write(resp)
+//        f onComplete {
+//          case _ => closeChannel(ctx)
+//        }
+//        Iteratee.flatten(f.map(_ => Done((),Input.Empty:Input[org.jboss.netty.buffer.ChannelBuffer])))
+//
+//      case other => Error("unexepected input",other)
+//    })
   }
 
   import HeaderNames._

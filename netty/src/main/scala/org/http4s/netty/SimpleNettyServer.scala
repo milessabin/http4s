@@ -10,20 +10,23 @@ import org.jboss.netty.bootstrap.ServerBootstrap
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
 import java.net.InetSocketAddress
 import concurrent.ExecutionContext
+import org.jboss.netty.logging.{Slf4JLoggerFactory, InternalLoggerFactory}
 
 object SimpleNettyServer {
   def apply(port: Int = 8080, staticFiles: String = "src/main/webapp")(route: Route)(implicit executionContext: ExecutionContext = ExecutionContext.global) =
-    new SimpleNettyServer(port, staticFiles, Seq(route))
+    new SimpleNettyServer(port, staticFiles, route)
 }
-class SimpleNettyServer private(port: Int, staticFiles: String, routes: Seq[Route])(implicit executionContext: ExecutionContext = ExecutionContext.global) {
+class SimpleNettyServer private(port: Int, staticFiles: String, route: Route)(implicit executionContext: ExecutionContext = ExecutionContext.global) {
+
+  org.jboss.netty.logging.InternalLoggerFactory.setDefaultFactory(new Slf4JLoggerFactory())
   val channelFactory = new ChannelPipelineFactory {
     def getPipeline: ChannelPipeline = {
       val pipe = Channels.pipeline()
       pipe.addLast("decoder", new HttpRequestDecoder)
       pipe.addLast("encoder", new HttpResponseEncoder)
-      pipe.addLast("chunkedWriter", new ChunkedWriteHandler)
-      pipe.addLast("route", Routes(routes reduce (_ orElse _)))
-      pipe.addLast("staticFiles", new StaticFileHandler(staticFiles))
+//      pipe.addLast("chunkedWriter", new ChunkedWriteHandler)//
+      pipe.addLast("route", Routes(route))
+//      pipe.addLast("staticFiles", new StaticFileHandler(staticFiles))
       pipe
     }
   }

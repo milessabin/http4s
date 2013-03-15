@@ -81,7 +81,7 @@ object BodyChunk {
 
   implicit def canBuildFrom: CanBuildFrom[TraversableOnce[Byte], Byte, BodyChunk] =
     new CanBuildFrom[TraversableOnce[Byte], Byte, BodyChunk] {
-      def apply(from: TraversableOnce[Byte]): Builder = newBuilder
+      def apply(from: TraversableOnce[Byte]): Builder = (newBuilder ++= from).asInstanceOf[Builder]
       def apply(): Builder = newBuilder
     }
 }
