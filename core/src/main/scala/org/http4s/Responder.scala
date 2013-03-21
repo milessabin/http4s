@@ -4,7 +4,8 @@ package org.http4s
 import play.api.libs.iteratee._
 import java.net.{URL, URI}
 import reflect.ClassTag
-import util.DateTime
+import util.{Spool, DateTime}
+import concurrent.Future
 
 
 case class Responder(
@@ -21,7 +22,7 @@ case class Responder(
 }
 
 object Responder {
-  val EmptyBody: Enumeratee[HttpChunk, HttpChunk] = Enumeratee.heading(Enumerator.eof)
+  val EmptyBody: Spool[HttpChunk] = Spool.empty
 
   implicit def responder2Handler(responder: Responder): Iteratee[HttpChunk, Responder] = Done(responder)
 
@@ -78,7 +79,7 @@ object Status {
   }
 
   trait EntityResponderGenerator extends NoEntityResponderGenerator { self: Status =>
-    def apply[A](body: A)(implicit w: Writable[A]): Responder =
+    def apply[A](body: A)(implicit w: Writable[A]): Spool[HttpChunk] => Future[Responder] =
       apply(body, w.contentType)(w)
 
     def apply[A](body: A, contentType: ContentType)(implicit w: Writable[A]) = {
@@ -86,7 +87,8 @@ object Status {
       val (parsedBody, length) = w.toBody(body)
       headers :+= HttpHeaders.ContentType(contentType)
       length.foreach{ length => headers :+= HttpHeaders.ContentLength(length) }
-      Responder(ResponsePrelude(self, headers), parsedBody)
+      def fun(i: Spool[HttpChunk]) = Future.successful(Responder(ResponsePrelude(self, headers), parsedBody))
+      fun(_)
     }
   }
 
@@ -141,7 +143,7 @@ object Status {
   object PaymentRequired extends Status(402, "Payment Required") with EntityResponderGenerator
   object Forbidden extends Status(403, "Forbidden") with EntityResponderGenerator
   object NotFound extends Status(404, "Not Found") with EntityResponderGenerator {
-    def apply(request: RequestPrelude): Responder = apply(s"${request.pathInfo} not found")
+    def apply(request: RequestPrelude): Spool[HttpChunk] => Future[Responder] = apply(s"${request.pathInfo} not found")
   }
   object MethodNotAllowed extends Status(405, "Method Not Allowed") {
     def apply(allowed: TraversableOnce[Method], body: ResponderBody, headers: HttpHeaders = HttpHeaders.Empty): Responder =
@@ -175,7 +177,7 @@ object Status {
 
   object InternalServerError extends Status(500, "Internal Server Error") with EntityResponderGenerator {
     // TODO Bad in production.  Development mode?  Implicit renderer?
-    def apply(t: Throwable): Responder = apply(s"${t.getMessage}\n\nStacktrace:\n${t.getStackTraceString}")
+    def apply(t: Throwable): Spool[HttpChunk] => Future[Responder] = apply(s"${t.getMessage}\n\nStacktrace:\n${t.getStackTraceString}")
   }
   object NotImplemented extends Status(501, "Not Implemented") with EntityResponderGenerator
   object BadGateway extends Status(502, "Bad Gateway") with EntityResponderGenerator

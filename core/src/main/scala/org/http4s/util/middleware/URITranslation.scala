@@ -3,6 +3,7 @@ package middleware
 
 import org.http4s.{Responder, HttpChunk, Route, RequestPrelude}
 import play.api.libs.iteratee.Iteratee
+import concurrent.Future
 
 /**
  * @author Bryce Anderson
@@ -20,7 +21,7 @@ object URITranslation {
   }
 
   def TranslatePath(trans: String => String)(in: Route): Route = new Route {
-    def apply(req: RequestPrelude): Iteratee[HttpChunk, Responder] =
+    def apply(req: RequestPrelude): Spool[HttpChunk] => Future[Responder] =
         in(req.copy(pathInfo = trans(req.pathInfo)))
 
     def isDefinedAt(req: RequestPrelude): Boolean =

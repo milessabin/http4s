@@ -5,6 +5,9 @@ import org.specs2.time.NoTimeConversions
 
 import org.http4s._
 import play.api.libs.iteratee.Enumerator
+import util.Spool
+import concurrent.ExecutionContext.Implicits.global
+
 /**
  * @author Bryce Anderson
  * Created on 3/9/13 at 11:10 AM
@@ -12,10 +15,10 @@ import play.api.libs.iteratee.Enumerator
 class MiddlewareSpec extends Specification with NoTimeConversions {
   import util.middleware.URITranslation._
 
-  val echoBody = Enumerator("one", "two", "three").map[HttpChunk](s => BodyChunk(s))
+  val echoBody = Spool.Cons("onetwothree").map[HttpChunk](s => BodyChunk(s))
   val echoReq = RequestPrelude(requestMethod = Method.Post, pathInfo = "/rootPath/echo")
 
-  val pingBody = Enumerator.eof[HttpChunk]
+  val pingBody = Spool.empty
   val pingReq = RequestPrelude(requestMethod = Method.Get, pathInfo = "/rootPath/ping")
 
   "TranslateRoot" should {

@@ -6,6 +6,7 @@ import http4s.attributes.RequestScope
 import http4s.ext.Http4sString
 import http4s.HttpHeaders.RawHeader
 import http4s.parser.HttpParser
+import http4s.util.Spool
 import play.api.libs.iteratee.{Enumeratee, Iteratee, Enumerator}
 import scala.language.implicitConversions
 import concurrent.{ExecutionContext, Future}
@@ -19,9 +20,9 @@ import com.typesafe.config.{ConfigFactory, Config}
 //import spray.http.HttpHeaders.RawHeader
 
 package object http4s {
-  type Route = PartialFunction[RequestPrelude, Iteratee[HttpChunk, Responder]]
+  type Route = PartialFunction[RequestPrelude, Spool[HttpChunk] => Future[Responder]]
 
-  type ResponderBody = Enumeratee[HttpChunk, HttpChunk]
+  type ResponderBody = Spool[HttpChunk]
 
   type Middleware = (Route => Route)
 
