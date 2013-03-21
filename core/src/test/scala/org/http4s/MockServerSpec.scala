@@ -18,17 +18,17 @@ class MockServerSpec extends Specification with NoTimeConversions {
 
   "A mock server" should {
 
-    "handle matching routes" in {
+    "handle matching get routes" in {
       val req = RequestPrelude( pathInfo = "/ping")
       val body = Spool.empty
       new String(server.response(req, body).body) should_==("pong")
     }
-//
-//    "handle matching routes" in {
-//      val req = RequestPrelude(requestMethod = Method.Post, pathInfo = "/echo")
-//      val body = Spool.Cons("onetwothree").map(s => BodyChunk(s, req.charset))
-//      new String(server.response(req, body).body) should_==("onetwothree")
-//    }
+
+    "handle matching post routes" in {
+      val req = RequestPrelude(requestMethod = Method.Post, pathInfo = "/echo")
+      val body = Spool("one", "two","three").map(s => BodyChunk(s, req.charset))
+      new String(server.response(req, body).body) should_==("onetwothree")
+    }
 
 //    "runs a sum" in {
 //      val req = RequestPrelude(requestMethod = Method.Post, pathInfo = "/sum")

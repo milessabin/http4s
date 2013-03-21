@@ -38,35 +38,35 @@ object Writable {
       def contentType: ContentType = ContentType.`text/plain`.withCharset(charset)
       def asByteString(s: String) = ByteString(s, charset.nioCharset.name)
     }
-//
-//  implicit def htmlWritable(implicit charset: HttpCharset = HttpCharsets.`UTF-8`) =
-//    new SimpleWritable[xml.Elem] {
-//      def contentType: ContentType = ContentType(MediaTypes.`text/html`).withCharset(charset)
-//      def asByteString(s: xml.Elem) = ByteString(s.buildString(false), charset.nioCharset.name)
-//    }
-//
-//  implicit def intWritable(implicit charset: HttpCharset = HttpCharsets.`UTF-8`) =
-//    new SimpleWritable[Int] {
-//      def contentType: ContentType = ContentType.`text/plain`.withCharset(charset)
-//      def asByteString(i: Int): ByteString = ByteString(i.toString, charset.nioCharset.name)
-//    }
-//
-//  implicit def ByteStringWritable =
-//    new SimpleWritable[ByteString] {
-//      def contentType: ContentType = ContentType.`application/octet-stream`
-//      def asByteString(ByteString: ByteString) = ByteString
-//    }
-//
-//  // More complex types can be implements in terms of simple types
-//  implicit def traversableWritable[A](implicit writable: SimpleWritable[A]) =
-//    new Writable[TraversableOnce[A]] {
-//      def contentType: ContentType = writable.contentType
-//      override def toBody(as: TraversableOnce[A]) = {
-//        val bs = as.foldLeft(ByteString.empty) { (acc, a) => acc ++ writable.asByteString(a) }
-//        (sendByteString(bs), Some(bs.length))
-//      }
-//    }
-//
+
+  implicit def htmlWritable(implicit charset: HttpCharset = HttpCharsets.`UTF-8`) =
+    new SimpleWritable[xml.Elem] {
+      def contentType: ContentType = ContentType(MediaTypes.`text/html`).withCharset(charset)
+      def asByteString(s: xml.Elem) = ByteString(s.buildString(false), charset.nioCharset.name)
+    }
+
+  implicit def intWritable(implicit charset: HttpCharset = HttpCharsets.`UTF-8`) =
+    new SimpleWritable[Int] {
+      def contentType: ContentType = ContentType.`text/plain`.withCharset(charset)
+      def asByteString(i: Int): ByteString = ByteString(i.toString, charset.nioCharset.name)
+    }
+
+  implicit def ByteStringWritable =
+    new SimpleWritable[ByteString] {
+      def contentType: ContentType = ContentType.`application/octet-stream`
+      def asByteString(ByteString: ByteString) = ByteString
+    }
+
+  // More complex types can be implements in terms of simple types
+  implicit def traversableWritable[A](implicit writable: SimpleWritable[A]) =
+    new Writable[TraversableOnce[A]] {
+      def contentType: ContentType = writable.contentType
+      override def toBody(as: TraversableOnce[A]) = {
+        val bs = as.foldLeft(ByteString.empty) { (acc, a) => acc ++ writable.asByteString(a) }
+        (sendByteString(bs), Some(bs.length))
+      }
+    }
+
 //  implicit def enumerateeWritable =
 //  new Writable[Enumeratee[HttpChunk, HttpChunk]] {
 //    def contentType = ContentType.`application/octet-stream`
@@ -77,12 +77,20 @@ object Writable {
 //  new Writable[Enumerator[A]] {
 //    def contentType = writable.contentType
 //    override def toBody(a: Enumerator[A]) = (sendEnumerator(a.map[HttpChunk]{ i => BodyChunk(writable.asByteString(i)) }), None)
-//  }
-//
-//  implicit def futureWritable[A](implicit writable: SimpleWritable[A], ec: ExecutionContext) =
-//  new Writable[Future[A]] {
-//    def contentType = writable.contentType
-//    override def toBody(f: Future[A]) = (sendFuture(f.map{ d => BodyChunk(writable.asByteString(d))}), None)
-//  }
+
+  implicit def spoolWritable[A](implicit writable: SimpleWritable[A], ec: ExecutionContext) =
+  new Writable[Spool[A]] {
+    def contentType = writable.contentType
+    override def toBody(s: Spool[A]) =
+      (Spool.Cons[HttpChunk](BodyChunk(),
+        s.flatMap(a => Future.successful(writable.toBody(a)._1))), None)
+  }
+
+  implicit def futureWritable[A](implicit writable: SimpleWritable[A], ec: ExecutionContext) =
+  new Writable[Future[A]] {
+    def contentType = writable.contentType
+    override def toBody(f: Future[A]): (Spool[HttpChunk], Option[Int]) =
+      (Spool.Cons[HttpChunk](BodyChunk(), f.map( a => writable.toBody(a)._1)), None)
+  }
 
 }

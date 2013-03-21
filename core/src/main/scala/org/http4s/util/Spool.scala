@@ -207,6 +207,8 @@ object Spool {
     def *::(head: A) = cons(head, tail)
   }
 
+  def apply[T](in: T*): Spool[T] = in.foldRight[Spool[T]](Spool.empty)((i, s) =>Spool.Cons(i, Future.successful(s)))
+
   implicit def syntax[A](s: Future[Spool[A]]): Syntax[A] = new Syntax(s)
 
   object *:: {

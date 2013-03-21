@@ -13,19 +13,10 @@ class MockServer(route: Route)(implicit executor: ExecutionContext = ExecutionCo
 
   def apply(req: RequestPrelude, spool: Spool[HttpChunk]): Future[Response] = {
     try {
-//      route.lift(req).fold(Future.successful(onNotFound)) { parser =>
-//        val it: Iteratee[HttpChunk, Response] = parser.flatMap { responder =>
-//          val responseBodyIt: Iteratee[BodyChunk, BodyChunk] = Iteratee.consume()
-//          responder.body ><> BodyParser.whileBodyChunk &>> responseBodyIt map { bytes: BodyChunk =>
-//            Response(responder.prelude.status, responder.prelude.headers, body = bytes.toArray)
-//          }
-//        }
-//        enum.run(it)
-//      }
       route.lift(req).fold(Future.successful(onNotFound)) { handler: (Spool[HttpChunk] => Future[Responder]) =>
         handler(spool).flatMap { responder =>
           responder.body.fold(ByteString.empty)( (b, chunk) => chunk match {
-            case BodyChunk(bytes) => println(new String(bytes.toArray)); b ++ bytes
+            case BodyChunk(bytes) => b ++ bytes
             case _ => b
           })
           .map( byteStr => Response(responder.prelude.status, responder.prelude.headers, byteStr.toArray))

@@ -15,7 +15,7 @@ import concurrent.ExecutionContext.Implicits.global
 class MiddlewareSpec extends Specification with NoTimeConversions {
   import util.middleware.URITranslation._
 
-  val echoBody = Spool.Cons("onetwothree").map[HttpChunk](s => BodyChunk(s))
+  val echoBody = Spool("one", "two", "three").map[HttpChunk](s => BodyChunk(s))
   val echoReq = RequestPrelude(requestMethod = Method.Post, pathInfo = "/rootPath/echo")
 
   val pingBody = Spool.empty
@@ -31,7 +31,7 @@ class MiddlewareSpec extends Specification with NoTimeConversions {
 
     "Be undefined at non-matching address" in {
       val req = RequestPrelude(requestMethod = Method.Post, pathInfo = "/foo/echo")
-      server.response(req, echoBody) should_== server.onNotFound
+      server.response(req, echoBody).statusLine should_== server.onNotFound.statusLine
     }
 
   }
@@ -50,7 +50,7 @@ class MiddlewareSpec extends Specification with NoTimeConversions {
 
     "Be undefined at non-matching address" in {
       val req = RequestPrelude(requestMethod = Method.Post, pathInfo = "/foo/echo")
-      server.response(req, echoBody) should_== server.onNotFound
+      server.response(req, echoBody).statusLine should_== server.onNotFound.statusLine
     }
   }
 

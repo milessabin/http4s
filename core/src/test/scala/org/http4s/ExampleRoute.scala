@@ -5,6 +5,7 @@ import scala.language.reflectiveCalls
 import concurrent.{Future, ExecutionContext}
 import play.api.libs.iteratee._
 import akka.util.ByteString
+import util.Spool
 
 object ExampleRoute extends RouteHandler {
   import Status._
@@ -18,14 +19,9 @@ object ExampleRoute extends RouteHandler {
     case Get -> Root / "ping" =>
       Ok("pong")
 
-//    case Post -> Root / "echo" =>
-//      Ok(Enumeratee.passAlong[HttpChunk])
-//
-//    case Get -> Root / "echo"  =>
-//      Ok(Enumeratee.map[HttpChunk] {
-//        case BodyChunk(e) => BodyChunk(e.slice(6, e.length)): HttpChunk
-//        case chunk => chunk
-//      })
+    case req @Post -> Root / "echo"  =>
+      spool =>
+        Future.successful(Responder(ResponsePrelude(status = Status.Ok), spool))
 //
 //    case Get -> Root / "echo2" =>
 //      Ok(Enumeratee.map[HttpChunk]{
